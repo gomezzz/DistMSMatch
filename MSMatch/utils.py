@@ -4,6 +4,7 @@ import logging
 import numpy as np
 from random import sample
 import matplotlib.pyplot as plt
+from .models.nets.unet_encoder import UNetEncoder
 
 def plot_examples(images,labels,encoding, figsize=(8, 5),dpi=150, labels_fontsize=5, prediction=None, save_fig_name=None):
     """Plotting 32 randomly sampled image examples for a target dataset, ensuring that at least one image for each class is got. If `prediction` is given, both predicted and expected classes are shown for each image.
@@ -95,62 +96,36 @@ def test_setattr_cls_from_kwargs():
 
 
 def net_builder(
-    net_name, from_name: bool, net_conf=None, pretrained=False, in_channels=3
+    net_name, net_conf=None, pretrained=False, in_channels=3
 ):
     """
     return **class** of backbone network (not instance).
     Args
         net_name: 'WideResNet' or network names in torchvision.models
-        from_name: If True, net_buidler takes models in torch.vision models. Then, net_conf is ignored.
         net_conf: When from_name is False, net_conf is the configuration of backbone network (now, only WRN is supported).
         pre_trained: Specifies if a pretrained network should be loaded (only works for efficientNet)
         in_channels: Input channels to the network
     """
-    if from_name:
+    if "efficientnet" in net_name:
+        if pretrained:
+            print("Using pretrained", net_name, "...")
+            return lambda num_classes, in_channels: EfficientNet.from_pretrained(
+                net_name, num_classes=num_classes, in_channels=in_channels
+            )
+
+        else:
+            print("Using not pretrained model", net_name, "...")
+            return lambda num_classes, in_channels: EfficientNet.from_name(
+                net_name, num_classes=num_classes, in_channels=in_channels
+            )
+    elif "unet" in net_name.lower():
         assert in_channels == 3
         assert not pretrained
-        import torchvision.models as models
-
-        model_name_list = sorted(
-            name
-            for name in models.__dict__
-            if name.islower()
-            and not name.startswith("__")
-            and callable(models.__dict__[name])
+        return lambda num_classes, in_channels: UNetEncoder(
+            num_classes=num_classes, in_channels=in_channels, scale=1.0
         )
-
-        if net_name not in model_name_list:
-            assert Exception(
-                f"[!] Networks' Name is wrong, check net config, \
-                               expected: {model_name_list}  \
-                               received: {net_name}"
-            )
-        else:
-            return models.__dict__[net_name]
-
     else:
-        if "efficientnet" in net_name:
-            if pretrained:
-                print("Using pretrained", net_name, "...")
-                return lambda num_classes, in_channels: EfficientNet.from_pretrained(
-                    net_name, num_classes=num_classes, in_channels=in_channels
-                )
-
-            else:
-                print("Using not pretrained model", net_name, "...")
-                return lambda num_classes, in_channels: EfficientNet.from_name(
-                    net_name, num_classes=num_classes, in_channels=in_channels
-                )
-        elif "unet" in net_name.lower():
-            assert in_channels == 3
-            assert not pretrained
-            import models.nets.unet_encoder as net
-
-            return lambda num_classes, in_channels: net.UNetEncoder(
-                num_classes=num_classes, in_channels=in_channels, scale=1.0
-            )
-        else:
-            assert Exception("Not Implemented Error")
+        assert Exception("Not Implemented Error")
 
 
 def test_net_builder(net_name, from_name, net_conf=None, pretrained=False):

@@ -7,7 +7,7 @@ import contextlib
 from tqdm import tqdm
 
 from .fixmatch_utils import consistency_loss, Get_Scalar
-from train_utils import ce_loss, accuracy
+from ...train_utils import ce_loss, accuracy
 
 
 class FixMatch:

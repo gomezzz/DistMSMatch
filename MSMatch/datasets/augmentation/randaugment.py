@@ -9,12 +9,6 @@ import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
 import albumentations as A
 import numpy as np
 
-try:  # to test locally by running python randaugment.py
-    from .ms_augmentations import ms_augmentation_list
-except:
-    from ms_augmentations import ms_augmentation_list
-
-
 def AutoContrast(img, _):
     return PIL.ImageOps.autocontrast(img)
 

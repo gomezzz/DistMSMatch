@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from train_utils import ce_loss
+from ...train_utils import ce_loss
 
 
 class Get_Scalar:
