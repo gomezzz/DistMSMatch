@@ -21,9 +21,6 @@ class FixMatch:
         p_cutoff,
         lambda_u,
         hard_label=True,
-        t_fn=None,
-        p_fn=None,
-        it=0,
         num_eval_iter=1000,
         tb_log=None,
         logger=None,
@@ -39,7 +36,6 @@ class FixMatch:
             p_cutoff: confidence cutoff parameters for loss masking
             lambda_u: ratio of unsupervised loss to supervised loss
             hard_label: If True, consistency regularization use a hard pseudo label.
-            it: initial iteration count
             num_eval_iter: freqeuncy of iteration (after 500,000 iters)
             tb_log: tensorboard writer (see train_utils.py)
             logger: logger (see utils.py)
