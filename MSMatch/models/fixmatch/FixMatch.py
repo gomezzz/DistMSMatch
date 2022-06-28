@@ -44,7 +44,6 @@ class FixMatch:
             tb_log: tensorboard writer (see train_utils.py)
             logger: logger (see utils.py)
         """
-
         super(FixMatch, self).__init__()
 
         # momentum update param
@@ -122,19 +121,12 @@ class FixMatch:
         # lb: labeled, ulb: unlabeled
         self.train_model.train()
 
-        # for gpu profiling
-        start_batch = torch.cuda.Event(enable_timing=True)
-        end_batch = torch.cuda.Event(enable_timing=True)
-        start_run = torch.cuda.Event(enable_timing=True)
-        end_run = torch.cuda.Event(enable_timing=True)
-
         total_epochs = args.num_train_iter // args.num_eval_iter
         curr_epoch = 0
         progressbar = tqdm(
             desc=f"Epoch {curr_epoch}/{total_epochs}", total=args.num_eval_iter
         )
 
-        start_batch.record()
         best_eval_acc, best_it = 0.0, 0
 
         scaler = GradScaler()
@@ -147,20 +139,17 @@ class FixMatch:
             if self.it > args.num_train_iter:
                 break
 
-            end_batch.record()
-            torch.cuda.synchronize()
-            start_run.record()
-
             num_lb = x_lb.shape[0]
             num_ulb = x_ulb_w.shape[0]
             assert num_ulb == x_ulb_s.shape[0]
 
-            x_lb, x_ulb_w, x_ulb_s = (
-                x_lb.cuda(args.gpu),
-                x_ulb_w.cuda(args.gpu),
-                x_ulb_s.cuda(args.gpu),
-            )
-            y_lb = y_lb.cuda(args.gpu)
+            if torch.cuda.is_available():
+                x_lb, x_ulb_w, x_ulb_s = (
+                    x_lb.cuda(args.gpu),
+                    x_ulb_w.cuda(args.gpu),
+                    x_ulb_s.cuda(args.gpu),
+                )
+                y_lb = y_lb.cuda(args.gpu)
 
             inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s))
 
@@ -204,9 +193,6 @@ class FixMatch:
                 train_accuracy = accuracy(logits_x_lb, y_lb)
                 train_accuracy = train_accuracy[0]
 
-            end_run.record()
-            torch.cuda.synchronize()
-
             # tensorboard_dict update
             tb_dict = {}
             tb_dict["train/sup_loss"] = sup_loss.detach()
@@ -214,10 +200,6 @@ class FixMatch:
             tb_dict["train/total_loss"] = total_loss.detach()
             tb_dict["train/mask_ratio"] = 1.0 - mask.detach()
             tb_dict["lr"] = self.optimizer.param_groups[0]["lr"]
-            tb_dict["train/prefetch_time"] = (
-                start_batch.elapsed_time(end_batch) / 1000.0
-            )
-            tb_dict["train/run_time"] = start_run.elapsed_time(end_run) / 1000.0
             tb_dict["train/top-1-acc"] = train_accuracy
 
             progressbar.set_postfix_str(f"Total Loss={total_loss.detach():.3e}")
@@ -256,7 +238,6 @@ class FixMatch:
 
             self.it += 1
             del tb_dict
-            start_batch.record()
             if self.it > 2 ** 19:
                 self.num_eval_iter = 1000
 
@@ -278,7 +259,8 @@ class FixMatch:
         total_acc = 0.0
         total_num = 0.0
         for x, y in eval_loader:
-            x, y = x.cuda(args.gpu), y.cuda(args.gpu)
+            if torch.cuda.is_available():
+                x, y = x.cuda(args.gpu), y.cuda(args.gpu)
             num_batch = x.shape[0]
             total_num += num_batch
             logits = eval_model(x)
