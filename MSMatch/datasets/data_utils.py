@@ -113,16 +113,10 @@ def get_data_loader(
         if isinstance(data_sampler, str):
             data_sampler = get_sampler_by_name(data_sampler)
 
-        if distributed:
-            assert dist.is_available()
-            num_replicas = dist.get_world_size()
-        else:
-            num_replicas = 1
-
         if (num_epochs is not None) and (num_iters is None):
             num_samples = len(dset) * num_epochs
         elif (num_epochs is None) and (num_iters is not None):
-            num_samples = batch_size * num_iters * num_replicas
+            num_samples = batch_size * num_iters
         else:
             num_samples = len(dset)
 

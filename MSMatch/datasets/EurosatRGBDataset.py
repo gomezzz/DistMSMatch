@@ -3,7 +3,7 @@ import numpy as np
 import os
 from PIL import Image
 from skimage.transform import resize
-from skimage import img_as_ubyte, img_as_float32
+from skimage import img_as_ubyte
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 import torch

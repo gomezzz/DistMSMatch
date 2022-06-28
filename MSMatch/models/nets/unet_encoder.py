@@ -4,12 +4,21 @@ import torch.nn.functional as F
 
 
 class UNetEncoder(nn.Module):
+    """A simple U-net style encoder.
+    """
     def __init__(
         self,
         in_channels,
         num_classes,
         scale=1.0,
     ):
+        """Initializes the encoder.
+
+        Args:
+            in_channels (int): number of input channels
+            num_classes (int): number of output classes
+            scale (float, optional): scale of the network. Defaults to 1.0, which leads to roughly 1M parameters
+        """
         super(UNetEncoder, self).__init__()
         self.conv1_1 = nn.Conv2d(in_channels, int(scale * 64), 3)
         self.conv1_2 = nn.Conv2d(int(scale * 64), int(scale * 64), 3)
@@ -44,14 +53,3 @@ class UNetEncoder(nn.Module):
 
         x = self.fc(x)
         return x
-
-
-if __name__ == "__main__":
-    # For testing
-    def count_parameters(model):
-        return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-    net = UNetEncoder(3, 10)
-    print(f"Number of Trainable Params: {count_parameters(net)}")
-    img = torch.ones((16, 3, 64, 64))
-    net(img)

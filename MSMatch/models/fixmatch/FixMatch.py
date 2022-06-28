@@ -6,7 +6,7 @@ import os
 import contextlib
 from tqdm import tqdm
 
-from .fixmatch_utils import consistency_loss, Get_Scalar
+from .fixmatch_utils import consistency_loss
 from ...train_utils import ce_loss, accuracy
 
 
@@ -27,6 +27,7 @@ class FixMatch:
     ):
         """
         class Fixmatch contains setter of data_loader, optimizer, and model update methods.
+
         Args:
             net_builder: backbone network class (see net_builder in utils.py)
             num_classes: # of label classes
@@ -47,15 +48,12 @@ class FixMatch:
         self.num_classes = num_classes
         self.ema_m = ema_m
 
-        # create the encoders
-        # network is builded only by num_classes,
-        # other configs are covered in main.py
-
+        # note there is a separate eval model due to exponential moving average of the weights
         self.train_model = net_builder(num_classes=num_classes, in_channels=in_channels)
         self.eval_model = net_builder(num_classes=num_classes, in_channels=in_channels)
         self.num_eval_iter = num_eval_iter
-        self.t_fn = Get_Scalar(T)  # temperature params function
-        self.p_fn = Get_Scalar(p_cutoff)  # confidence cutoff function
+        self.T = T  # temperature params function
+        self.p_cutoff = p_cutoff  # confidence cutoff function
         self.lambda_u = lambda_u
         self.tb_log = tb_log
         self.use_hard_label = hard_label
@@ -107,7 +105,7 @@ class FixMatch:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-    def train(self, args, logger=None, progressbar=None):
+    def train(self, cfg, progressbar=None):
         """
         Train function of FixMatch.
         From data_loader, it inference training data, computes losses, and update the networks.
@@ -117,22 +115,20 @@ class FixMatch:
         # lb: labeled, ulb: unlabeled
         self.train_model.train()
 
-        total_epochs = args.num_train_iter // args.num_eval_iter
+        total_epochs = cfg.num_train_iter // cfg.num_eval_iter
         curr_epoch = 0
         progressbar = tqdm(
-            desc=f"Epoch {curr_epoch}/{total_epochs}", total=args.num_eval_iter
+            desc=f"Epoch {curr_epoch}/{total_epochs}", total=cfg.num_eval_iter
         )
 
         best_eval_acc, best_it = 0.0, 0
 
-        scaler = GradScaler()
-        amp_cm = autocast if args.amp else contextlib.nullcontext
         for (x_lb, y_lb), (x_ulb_w, x_ulb_s, _) in zip(
             self.loader_dict["train_lb"], self.loader_dict["train_ulb"]
         ):
 
-            # prevent the training iterations exceed args.num_train_iter
-            if self.it > args.num_train_iter:
+            # prevent the training iterations exceed cfg.num_train_iter
+            if self.it > cfg.num_train_iter:
                 break
 
             num_lb = x_lb.shape[0]
@@ -141,45 +137,35 @@ class FixMatch:
 
             if torch.cuda.is_available():
                 x_lb, x_ulb_w, x_ulb_s = (
-                    x_lb.cuda(args.gpu),
-                    x_ulb_w.cuda(args.gpu),
-                    x_ulb_s.cuda(args.gpu),
+                    x_lb.cuda(cfg.gpu),
+                    x_ulb_w.cuda(cfg.gpu),
+                    x_ulb_s.cuda(cfg.gpu),
                 )
-                y_lb = y_lb.cuda(args.gpu)
+                y_lb = y_lb.cuda(cfg.gpu)
 
             inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s))
 
             # inference and calculate sup/unsup losses
-            with amp_cm():
-                logits = self.train_model(inputs)
-                logits_x_lb = logits[:num_lb]
-                logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
-                del logits
+            logits = self.train_model(inputs)
+            logits_x_lb = logits[:num_lb]
+            logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
+            del logits
 
-                # hyper-params for update
-                T = self.t_fn(self.it)
-                p_cutoff = self.p_fn(self.it)
+            sup_loss = ce_loss(logits_x_lb, y_lb, reduction="mean")
+            unsup_loss, mask = consistency_loss(
+                logits_x_ulb_w,
+                logits_x_ulb_s,
+                "ce",
+                self.T,
+                self.p_cutoff,
+                use_hard_labels=cfg.hard_label,
+            )
 
-                sup_loss = ce_loss(logits_x_lb, y_lb, reduction="mean")
-                unsup_loss, mask = consistency_loss(
-                    logits_x_ulb_w,
-                    logits_x_ulb_s,
-                    "ce",
-                    T,
-                    p_cutoff,
-                    use_hard_labels=args.hard_label,
-                )
-
-                total_loss = sup_loss + self.lambda_u * unsup_loss
+            total_loss = sup_loss + self.lambda_u * unsup_loss
 
             # parameter updates
-            if args.amp:
-                scaler.scale(total_loss).backward()
-                scaler.step(self.optimizer)
-                scaler.update()
-            else:
-                total_loss.backward()
-                self.optimizer.step()
+            total_loss.backward()
+            self.optimizer.step()
 
             self.scheduler.step()
             self.train_model.zero_grad()
@@ -205,10 +191,10 @@ class FixMatch:
                 progressbar.close()
                 curr_epoch += 1
 
-                eval_dict = self.evaluate(args=args)
+                eval_dict = self.evaluate(cfg=cfg)
                 tb_dict.update(eval_dict)
 
-                save_path = os.path.join(args.save_dir, args.save_name)
+                save_path = os.path.join(cfg.save_dir, cfg.save_name)
 
                 if tb_dict["eval/top-1-acc"] > best_eval_acc:
                     best_eval_acc = tb_dict["eval/top-1-acc"]
@@ -219,11 +205,11 @@ class FixMatch:
                 )
 
                 progressbar = tqdm(
-                    desc=f"Epoch {curr_epoch}/{total_epochs}", total=args.num_eval_iter
+                    desc=f"Epoch {curr_epoch}/{total_epochs}", total=cfg.num_eval_iter
                 )
 
-            if not args.multiprocessing_distributed or (
-                args.multiprocessing_distributed and args.rank % ngpus_per_node == 0
+            if not cfg.multiprocessing_distributed or (
+                cfg.multiprocessing_distributed and cfg.rank % ngpus_per_node == 0
             ):
 
                 if self.it == best_it:
@@ -237,12 +223,12 @@ class FixMatch:
             if self.it > 2 ** 19:
                 self.num_eval_iter = 1000
 
-        eval_dict = self.evaluate(args=args)
+        eval_dict = self.evaluate(cfg=cfg)
         eval_dict.update({"eval/best_acc": best_eval_acc, "eval/best_it": best_it})
         return eval_dict
 
     @torch.no_grad()
-    def evaluate(self, eval_loader=None, args=None):
+    def evaluate(self, eval_loader=None, cfg=None):
         torch.cuda.empty_cache()
         use_ema = hasattr(self, "eval_model")
 
@@ -256,7 +242,7 @@ class FixMatch:
         total_num = 0.0
         for x, y in eval_loader:
             if torch.cuda.is_available():
-                x, y = x.cuda(args.gpu), y.cuda(args.gpu)
+                x, y = x.cuda(cfg.gpu), y.cuda(cfg.gpu)
             num_batch = x.shape[0]
             total_num += num_batch
             logits = eval_model(x)
@@ -326,7 +312,3 @@ class FixMatch:
                 self.print_fn(f"Check Point Loading: {key} is LOADED")
             else:
                 self.print_fn(f"Check Point Loading: {key} is **NOT** LOADED")
-
-
-if __name__ == "__main__":
-    pass

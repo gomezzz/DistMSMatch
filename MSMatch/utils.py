@@ -1,22 +1,20 @@
 import os
 from efficientnet_pytorch import EfficientNet
 import logging
-import numpy as np
-from random import sample
-import matplotlib.pyplot as plt
 from .models.nets.unet_encoder import UNetEncoder
 
-def net_builder(
-    net_name, net_conf=None, pretrained=False, in_channels=3
-):
+def net_builder(net_name, pretrained=False, in_channels=3):
+    """Creates the kind of neural network specified by net_name.
+
+    Args:
+        net_name (str): name of the network, can be efficientnet-b0, b1, b2, b3, b4, b5, b6, b7 or unet
+        pretrained (bool, optional): if True, loads pretrained weights. Defaults to False.
+        in_channels (int, optional): number of input channels. Defaults to 3.
+
+    Returns:
+        torch.nn.Module: the created network
     """
-    return **class** of backbone network (not instance).
-    Args
-        net_name: 'WideResNet' or network names in torchvision.models
-        net_conf: When from_name is False, net_conf is the configuration of backbone network (now, only WRN is supported).
-        pre_trained: Specifies if a pretrained network should be loaded (only works for efficientNet)
-        in_channels: Input channels to the network
-    """
+    
     if "efficientnet" in net_name:
         if pretrained:
             print("Using pretrained", net_name, "...")
@@ -40,6 +38,16 @@ def net_builder(
 
 
 def get_logger(name, save_path=None, level="INFO"):
+    """Initializes the logger
+
+    Args:
+        name (str): logger name
+        save_path (str, optional): path to save the log file. Defaults to None. 
+        level (str, optional): Logging level. Defaults to "INFO".
+
+    Returns:
+        Logger: the created logger
+    """
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level))
 
@@ -57,32 +65,40 @@ def get_logger(name, save_path=None, level="INFO"):
     return logger
 
 def count_parameters(model):
+    """Counts the number of parameters in a model.
+
+    Args:
+        model (torch.model): model to count parameters of
+
+    Returns:
+        int: number of parameters
+    """
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def create_dir_str(args):
+def create_dir_str(cfg):
+    """Creates a string from the arguments.
+
+    Args:
+        cfg (DotMap): config dictionary/dotmap
+
+    Returns:
+        _type_: _description_
+    """
+    # fmt: off
     dir_name = (
-        args.dataset
-        + "/FixMatch_arch"
-        + args.net
-        + "_batch"
-        + str(args.batch_size)
-        + "_confidence"
-        + str(args.p_cutoff)
-        + "_lr"
-        + str(args.lr)
-        + "_uratio"
-        + str(args.uratio)
-        + "_wd"
-        + str(args.weight_decay)
-        + "_wu"
-        + str(args.ulb_loss_ratio)
-        + "_seed"
-        + str(args.seed)
-        + "_numlabels"
-        + str(args.num_labels)
-        + "_opt"
-        + str(args.opt)
+        cfg.dataset
+        + "/FixMatch_arch"  + cfg.net
+        + "_batch"          + str(cfg.batch_size)
+        + "_confidence"     + str(cfg.p_cutoff)
+        + "_lr"             + str(cfg.lr)
+        + "_uratio"         + str(cfg.uratio)
+        + "_wd"             + str(cfg.weight_decay)
+        + "_wu"             + str(cfg.ulb_loss_ratio)
+        + "_seed"           + str(cfg.seed)
+        + "_numlabels"      + str(cfg.num_labels)
+        + "_opt"            + str(cfg.opt)
     )
-    if args.pretrained:
+    # fmt: on
+    if cfg.pretrained:
         dir_name = dir_name + "_pretrained"
     return dir_name

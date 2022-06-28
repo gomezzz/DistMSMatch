@@ -9,7 +9,7 @@ import os
 
 class TBLog:
     """
-    Construc tensorboard writer (self.writer).
+    Construct tensorboard writer (self.writer).
     The tensorboard is saved at os.path.join(tb_dir, file_name).
     """
 
@@ -18,8 +18,9 @@ class TBLog:
         self.writer = SummaryWriter(os.path.join(self.tb_dir, file_name))
 
     def update(self, tb_dict, it, suffix=None):
-        """
-        Args
+        """Update the tensorboard with the given dictionary.
+
+        Args:
             tb_dict: contains scalar values for updating tensorboard
             it: contains information of iteration (int).
             suffix: If not None, the update key has the suffix.
@@ -40,14 +41,23 @@ def get_OPT(
     nesterov=True,
     bn_wd_skip=True,
 ):
+    """Creates a optimizer for the given network.
+
+    Args:
+        net (torch.model): network to optimize.
+        name (str): optimizer name.
+        lr (float): learning rate.
+        momentum (float): momentum.
+        weight_decay (float): weight decay.
+        nesterov (bool): if True, use Nesterov momentum.
+        bn_wd_skip (bool): If bn_wd_skip, the optimizer does not apply weight decay regularization on parameters in batch normalization.
+    
+    Returns:
+        torch.optim.Optimizer: optimizer.
     """
-    return optimizer (name) in torch.optim.
-    If bn_wd_skip, the optimizer does not apply
-    weight decay regularization on parameters in batch normalization.
-    """
+    decay = []
+    no_decay = []
     if name == "SGD":
-        decay = []
-        no_decay = []
         for name, param in net.named_parameters():
             if ("bn" in name) and bn_wd_skip:
                 no_decay.append(param)
@@ -70,8 +80,6 @@ def get_OPT(
                 "Learning rate is " + str(lr) + ". That is too high for ADAM."
             )
 
-        decay = []
-        no_decay = []
         for name, param in net.named_parameters():
             if ("bn" in name) and bn_wd_skip:
                 no_decay.append(param)
@@ -94,9 +102,17 @@ def get_cosine_schedule_with_warmup(
     num_warmup_steps=0,
     last_epoch=-1,
 ):
-    """
-    Get cosine scheduler (LambdaLR).
-    if warmup is needed, set num_warmup_steps (int) > 0.
+    """Get learning rate schedule with linear warmup and cosine decay.
+
+    Args:
+        optimizer (torch.optim.Optimizer): optimizer.
+        num_training_steps (int): total number of training steps.
+        num_cycles (float): number of cycles in the cosine decay.
+        num_warmup_steps (int): number of warmup steps.
+        last_epoch (int): last epoch number.
+
+    Returns:
+        torch.optim.lr_scheduler.LambdaLR: learning rate scheduler.
     """
 
     def _lr_lambda(current_step):
@@ -122,7 +138,7 @@ def accuracy(output, target, topk=(1,)):
     """
     Computes the accuracy over the k top predictions for the specified values of k
     
-    Args
+    Args:
         output: logits or probs (num of batch, num of classes)
         target: (num of batch, 1) or (num of batch, )
         topk: list of returned k
@@ -156,7 +172,7 @@ def ce_loss(logits, targets, use_hard_labels=True, reduction="none"):
     """
     wrapper for cross entropy loss in pytorch.
     
-    Args
+    Args:
         logits: logit values, shape=[Batch size, # of classes]
         targets: integer or vector, shape=[Batch size] or [Batch size, # of classes]
         use_hard_labels: If True, targets have [Batch size] shape with int values. If False, the target is vector (default True)

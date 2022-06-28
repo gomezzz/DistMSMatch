@@ -1,6 +1,6 @@
 import torch
 
-from .data_utils import get_sampler_by_name, get_data_loader, get_onehot, split_ssl_data
+from .data_utils import split_ssl_data
 from .BasicDataset import BasicDataset
 from .EurosatRGBDataset import EurosatRGBDataset
 
@@ -39,15 +39,14 @@ def get_inverse_transform(mean, std):
 
 class SSL_Dataset:
     """
-    SSL_Dataset class gets dataset (cifar10, cifar100) from torchvision.datasets,
-    separates labeled and unlabeled data,
+    SSL_Dataset class separates labeled and unlabeled data,
     and return BasicDataset: torch.utils.data.Dataset (see datasets.dataset.py)
     """
 
-    def __init__(self, name="cifar10", train=True, data_dir="./data", seed=42):
+    def __init__(self, name="eurosat_rgb", train=True, data_dir="./data", seed=42):
         """
         Args
-            name: name of dataset in torchvision.datasets (cifar10, cifar100)
+            name: name of dataset
             train: True means the dataset is training dataset (default=True)
             data_dir: path of directory, where data is downloaed or stored.
             seed: seed to use for the train / test split. Not available for cifar which is presplit
@@ -73,6 +72,8 @@ class SSL_Dataset:
             dset = EurosatRGBDataset(train=self.train, seed=self.seed)
         # elif self.name == "eurosat_ms":
         #     dset = EurosatDataset(train=self.train, seed=self.seed)
+        else:
+            raise NotImplementedError("Dataset {} is not available".format(self.name))
 
         self.label_encoding = dset.label_encoding
         self.num_classes = dset.num_classes
@@ -141,10 +142,10 @@ class SSL_Dataset:
             lb_targets,
             self.num_classes,
             self.transform,
-            False,
-            None,
-            onehot,
-            self.use_ms_augmentations,
+            use_strong_transform=False,
+            strong_transform=None,
+            onehot=onehot,
+            use_ms_augmentations=self.use_ms_augmentations,
         )
 
         ulb_dset = BasicDataset(

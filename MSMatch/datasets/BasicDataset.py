@@ -13,7 +13,7 @@ class BasicDataset(Dataset):
     BasicDataset returns a pair of image and labels (targets).
     If targets are not given, BasicDataset returns None as the label.
     This class supports strong augmentation for Fixmatch,
-    and return both weakly and strongly augmented images.
+    and returns both weakly and strongly augmented images.
     """
 
     def __init__(
@@ -38,7 +38,7 @@ class BasicDataset(Dataset):
             use_strong_transform: If True, this dataset returns both weakly and strongly augmented images.
             strong_transform: list of transformation functions for strong augmentation
             onehot: If True, label is converted into onehot vector.
-            use_ms_augmentations: If True will use albumentations and imgaug for augmentations (required for multispectral)
+            use_ms_augmentations: If True will use albumentations and imgaug for augmentations (required for multispectral).
         """
         super(BasicDataset, self).__init__()
         self.data = data
@@ -77,7 +77,6 @@ class BasicDataset(Dataset):
             )
 
         # set augmented images
-
         img = self.data[idx]
         if self.transform is None:
             return transforms.ToTensor()(img), target
