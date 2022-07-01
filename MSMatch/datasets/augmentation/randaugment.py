@@ -9,6 +9,7 @@ import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
 import albumentations as A
 import numpy as np
 
+
 def AutoContrast(img, _):
     return PIL.ImageOps.autocontrast(img)
 
@@ -191,4 +192,3 @@ if __name__ == "__main__":
         val = min_val + float(max_val - min_val) * random.random()
         print(op)
         img = op(test_img, val)
-

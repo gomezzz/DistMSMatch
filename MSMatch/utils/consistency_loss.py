@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
-from ...train_utils import ce_loss
+
+from ..utils.cross_entropy_loss import cross_entropy_loss
+
 
 def consistency_loss(
     logits_w, logits_s, name="ce", T=1.0, p_cutoff=0.0, use_hard_labels=True
@@ -21,11 +23,14 @@ def consistency_loss(
 
         if use_hard_labels:
             masked_loss = (
-                ce_loss(logits_s, max_idx, use_hard_labels, reduction="none") * mask
+                cross_entropy_loss(logits_s, max_idx, use_hard_labels, reduction="none")
+                * mask
             )
         else:
             pseudo_label = torch.softmax(logits_w / T, dim=-1)
-            masked_loss = ce_loss(logits_s, pseudo_label, use_hard_labels) * mask
+            masked_loss = (
+                cross_entropy_loss(logits_s, pseudo_label, use_hard_labels) * mask
+            )
         return masked_loss.mean(), mask.mean()
 
     else:

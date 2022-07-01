@@ -1,13 +1,12 @@
 import torch
 import torch.nn.functional as F
-from torch.cuda.amp import autocast, GradScaler
 
 import os
-import contextlib
 from tqdm import tqdm
 
-from .fixmatch_utils import consistency_loss
-from ...train_utils import ce_loss, accuracy
+from ...utils.consistency_loss import consistency_loss
+from ...utils.cross_entropy_loss import cross_entropy_loss
+from ...utils.accurarcy import accuracy
 
 
 class FixMatch:
@@ -29,9 +28,9 @@ class FixMatch:
         class Fixmatch contains setter of data_loader, optimizer, and model update methods.
 
         Args:
-            net_builder: backbone network class (see net_builder in utils.py)
+            net_builder: backbone network class (see get_net_builder in utils)
             num_classes: # of label classes
-            in_channels: number of image channels 
+            in_channels: number of image channels
             ema_m: momentum of exponential moving average for eval_model
             T: Temperature scaling parameter for output sharpening (only when hard_label = False)
             p_cutoff: confidence cutoff parameters for loss masking
@@ -151,7 +150,7 @@ class FixMatch:
             logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
             del logits
 
-            sup_loss = ce_loss(logits_x_lb, y_lb, reduction="mean")
+            sup_loss = cross_entropy_loss(logits_x_lb, y_lb, reduction="mean")
             unsup_loss, mask = consistency_loss(
                 logits_x_ulb_w,
                 logits_x_ulb_s,
@@ -220,7 +219,7 @@ class FixMatch:
 
             self.it += 1
             del tb_dict
-            if self.it > 2 ** 19:
+            if self.it > 2**19:
                 self.num_eval_iter = 1000
 
         eval_dict = self.evaluate(cfg=cfg)

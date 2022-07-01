@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 
 class UNetEncoder(nn.Module):
-    """A simple U-net style encoder.
-    """
+    """A simple U-net style encoder."""
+
     def __init__(
         self,
         in_channels,

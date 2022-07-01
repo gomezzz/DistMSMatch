@@ -17,7 +17,7 @@ def get_transform(mean, std, train=True):
             [
                 transforms.ToTensor(),
                 transforms.RandomHorizontalFlip(),
-                transforms.RandomAffine(0,translate=(0,0.125)),
+                transforms.RandomAffine(0, translate=(0, 0.125)),
                 transforms.Normalize(mean, std),
             ]
         )
@@ -85,7 +85,7 @@ class SSL_Dataset:
     def get_dset(self, use_strong_transform=False, strong_transform=None, onehot=False):
         """
         get_dset returns class BasicDataset, containing the returns of get_data.
-        
+
         Args
             use_strong_tranform: If True, returned dataset generates a pair of weak and strong augmented images.
             strong_transform: list of strong_transform (augmentation) if use_strong_transform is True
@@ -117,16 +117,16 @@ class SSL_Dataset:
         """
         get_ssl_dset split training samples into labeled and unlabeled samples.
         The labeled data is balanced samples over classes.
-        
+
         Args:
             num_labels: number of labeled data.
             index: If index of np.array is given, labeled data is not randomly sampled, but use index for sampling.
             include_lb_to_ulb: If True, consistency regularization is also computed for the labeled data.
-            use_strong_transform: If True, unlabeld dataset returns weak & strong augmented image pair. 
+            use_strong_transform: If True, unlabeld dataset returns weak & strong augmented image pair.
                                   If False, unlabeled datasets returns only weak augmented image.
             strong_transform: list of strong transform (RandAugment in FixMatch)
             oenhot: If True, the target is converted into onehot vector.
-            
+
         Returns:
             BasicDataset (for labeled data), BasicDataset (for unlabeld data)
         """
