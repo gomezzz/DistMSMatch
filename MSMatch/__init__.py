@@ -9,7 +9,7 @@ from .utils.get_cosine_schedule_with_warmup import get_cosine_schedule_with_warm
 from .datasets.BasicDataset import BasicDataset
 from .datasets.EurosatRGBDataset import EurosatRGBDataset
 from .datasets.SSL_Dataset import SSL_Dataset
-
+from .datasets.data_utils import get_data_loader
 from .models.fixmatch.FixMatch import FixMatch
 
 __all__ = [
@@ -17,7 +17,8 @@ __all__ = [
     "EurosatRGBDataset",
     "FixMatch",
     "get_cosine_schedule_with_warmup",
-    "get_data_loader" "get_default_cfg",
+    "get_data_loader",
+    "get_default_cfg",
     "get_net_builder",
     "get_logger",
     "get_optimizer",

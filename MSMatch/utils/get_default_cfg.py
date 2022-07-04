@@ -16,7 +16,7 @@ def get_default_cfg():
     cfg.net = "unet"
     cfg.batch_size = 32
     cfg.p_cutoff = 0.95
-    cfg.lr = 0.02
+    cfg.lr = 0.01
     cfg.uratio = 7
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
