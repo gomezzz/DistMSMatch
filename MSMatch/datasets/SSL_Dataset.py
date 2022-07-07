@@ -12,6 +12,16 @@ std["eurosat_rgb"] = [x / 255 for x in [51.92045453, 34.82338243, 29.26981551]]
 
 
 def get_transform(mean, std, train=True):
+    """Get weak augmentation transforms.
+
+    Args:
+        mean (float): mean of the dataset.
+        std (float): std of the dataset.
+        train (bool, optional): Whether training, in test only normalization is applied.
+
+    Returns:
+        torchvision.transforms.Compose: transforms.
+    """
     if train:
         return transforms.Compose(
             [
@@ -28,6 +38,15 @@ def get_transform(mean, std, train=True):
 
 
 def get_inverse_transform(mean, std):
+    """Get inverse transforms for weak augmentations.
+
+    Args:
+        mean (float): mean of the dataset.
+        std (float): std of the dataset.
+
+    Returns:
+        torchvision.transforms.Compose: inverse transforms.
+    """
     mean = torch.as_tensor(mean)
     std = torch.as_tensor(std)
     std_inv = 1 / (std + 1e-7)

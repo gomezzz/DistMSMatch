@@ -133,6 +133,15 @@ def get_data_loader(
 
 
 def get_onehot(num_classes, idx):
+    """Convert index to one-hot vector.
+
+    Args:
+        num_classes (int): Number of classes.
+        idx (int): Index of the class.
+
+    Returns:
+        One-hot vector.
+    """
     onehot = np.zeros([num_classes], dtype=np.float32)
     onehot[idx] += 1.0
     return onehot
