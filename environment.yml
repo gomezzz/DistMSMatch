@@ -1,0 +1,17 @@
+name: msmatch
+channels:
+- conda-forge
+- pytorch
+dependencies:
+- cudatoolkit
+- python
+- pytorch
+- torchvision
+- pillow
+- tqdm
+- numpy
+- scikit-image
+- scikit-learn
+- imageio
+- efficientnet-pytorch
+- albumentations
