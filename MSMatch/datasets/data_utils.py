@@ -1,9 +1,7 @@
 import torch
 from torch.utils.data import sampler, DataLoader
 from torch.utils.data.sampler import BatchSampler
-import torch.distributed as dist
 import numpy as np
-
 
 
 def split_ssl_data(
@@ -11,7 +9,7 @@ def split_ssl_data(
 ):
     """
     data & target is splitted into labeled and unlabeld data.
-    
+
     Args
         index: If np.array of index is given, select the data[index], target[index] as labeled samples.
         include_lb_to_ulb: If True, labeled data is also included in unlabeld data
@@ -92,9 +90,9 @@ def get_data_loader(
     get_data_loader returns torch.utils.data.DataLoader for a Dataset.
     All arguments are comparable with those of pytorch DataLoader.
     However, if distributed, DistributedProxySampler, which is a wrapper of data_sampler, is used.
-    
+
     Args
-        num_epochs: total batch -> (# of batches in dset) * num_epochs 
+        num_epochs: total batch -> (# of batches in dset) * num_epochs
         num_iters: total batch -> num_iters
     """
 
@@ -113,16 +111,10 @@ def get_data_loader(
         if isinstance(data_sampler, str):
             data_sampler = get_sampler_by_name(data_sampler)
 
-        if distributed:
-            assert dist.is_available()
-            num_replicas = dist.get_world_size()
-        else:
-            num_replicas = 1
-
         if (num_epochs is not None) and (num_iters is None):
             num_samples = len(dset) * num_epochs
         elif (num_epochs is None) and (num_iters is not None):
-            num_samples = batch_size * num_iters * num_replicas
+            num_samples = batch_size * num_iters
         else:
             num_samples = len(dset)
 
@@ -141,6 +133,15 @@ def get_data_loader(
 
 
 def get_onehot(num_classes, idx):
+    """Convert index to one-hot vector.
+
+    Args:
+        num_classes (int): Number of classes.
+        idx (int): Index of the class.
+
+    Returns:
+        One-hot vector.
+    """
     onehot = np.zeros([num_classes], dtype=np.float32)
     onehot[idx] += 1.0
     return onehot
