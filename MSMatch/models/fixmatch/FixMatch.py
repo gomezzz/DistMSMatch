@@ -38,7 +38,7 @@ class FixMatch:
             hard_label: If True, consistency regularization use a hard pseudo label.
             num_eval_iter: freqeuncy of iteration (after 500,000 iters)
             tb_log: tensorboard writer (see train_utils.py)
-            logger: logger (see utils.py)
+            logger: logger (see get_logger.py)
         """
         super(FixMatch, self).__init__()
 

@@ -25,7 +25,7 @@ def get_default_cfg():
     cfg.opt = "SGD"
     cfg.pretrained = False
     cfg.save_dir = "./saved_models"
-    cfg.save_name = "test"
+    cfg.save_name_root = "test"
     cfg.ema_m = 0.999
     cfg.bn_momentum = 1.0 - cfg.ema_m
     cfg.eval_batch_size = 1024
@@ -35,9 +35,10 @@ def get_default_cfg():
     cfg.hard_label = True
     cfg.multiprocessing_distributed = False
     cfg.num_eval_iter = 1000
+    cfg.scale=1
 
     dir_name = create_dir_str(cfg)
-    cfg.save_name = os.path.join(cfg.save_name, dir_name)
+    cfg.save_name = os.path.join(cfg.save_name_root, dir_name)
     cfg.save_path = os.path.join(cfg.save_dir, cfg.save_name)
 
     return cfg
