@@ -24,6 +24,7 @@ Distributed Semi-Supervised Multispectral Scene Classification with Few Labels
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
         <li><a href="#set-up-datasets">Set-up datasets</a></li>
+        <li><a href="#run-training">Run training</a></li>
       </ul>
     </li>
     <li><a href="#contributing">Contributing</a></li>
@@ -45,6 +46,7 @@ This is the code for the to realize a distributed version of [MSMatch](https://g
 * [EfficientNet PyTorch](https://github.com/lukemelas/EfficientNet-PyTorch)
 * [EfficientNet Lite PyTorch](https://pypi.org/project/efficientnet-lite-pytorch/)
 * [albumentations](https://github.com/albumentations-team/albumentations)
+* [papermill](https://papermill.readthedocs.io/en/latest/)
 * imageio, numpy, pandas
 
 <!-- GETTING STARTED -->
@@ -77,9 +79,18 @@ We recommend using [conda](https://docs.conda.io/en/latest/) to set-up your envi
     ```
 
 ### Set up datasets
-To launch the training on EuroSAT (rgb), it is necessary to download the corresponding datasets. The `root_dir` variable in the `datasets/EurosatRGBDataset.py` files shall be adjusted according to the dataset path. 
+To launch the training on `EuroSAT (rgb)`, it is necessary to download the corresponding datasets. The `root_dir` variable in the `datasets/EurosatRGBDataset.py` files shall be adjusted according to the dataset path. 
 
+### Run training
+To run the training, you can exploit the `run_notebook.py` script to run a notebook. The `Baseline.ipynb` notebook contains the `MSMatch`baseline. Different configurations files in `.toml` format can be used to set-up the different `MsMatch`hyperparameters. 
 
+To run the notebook, you can proceed as follows:
+
+```
+python run_notebook.py --notebook_path path_to_notebook --cfg_path path_to_cfg_file 
+````
+
+If `notebook_path` and `path_to_cfg_file` are not specified, the `Baseline.ipynb` notebook  will be run with default configuration.
 
 <!-- CONTRIBUTING -->
 ## Contributing
@@ -97,7 +108,7 @@ The project is open to community contributions. Feel free to open an [issue](htt
 <!-- CONTACT -->
 ## Contact 
 
-Created by ESA's [Advanced Concepts Team](https://www.esa.int/gsp/ACT/index.html) and [$\Phi$-lab](https://philab.phi.esa.int/) (shared first authorship).
+Created by ESA's [Advanced Concepts Team](https://www.esa.int/gsp/ACT/index.html) and [$\Phi$-lab](https://philab.phi.esa.int/1) (shared first authorship).
 
 - Pablo Gómez - `pablo.gomez at esa.int` (ACT)
 - Gabriele Meoni - `gabriele.meoni at esa.int` ($\Phi$-lab)

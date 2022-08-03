@@ -18,4 +18,5 @@ dependencies:
 - tensorboard
 - dotmap
 - termcolor
-
+- toml
+- papermill
