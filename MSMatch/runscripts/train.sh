@@ -1,6 +1,6 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=0
-SAVE_DIR="/mnt/home/meoni/projects/DistMSMatch/notebooks/saved_models"         
+export CUDA_VISIBLE_DEVICES=7
+SAVE_DIR="/home/gabrielemeoni/projects/DistMSMatch/notebooks/saved_models"         
 NET=unet #Options are efficientnet-lite0, efficientnet-b0, unet.
 BATCH_SIZE=16
 N_EPOCH=100                    
@@ -9,7 +9,7 @@ LR=0.01 #0.01
 RED='\033[0;31m'
 BLACK='\033[0m'
 #create save location
-NUM_LABELS_USED="50 100 500 1000 2000 3000"
+NUM_LABELS_USED="200"
 SCALE=0.5
 
 #switch to fixmatch folder for execution
