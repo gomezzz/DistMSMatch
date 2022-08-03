@@ -21,8 +21,8 @@ def main():
     parser.add_argument('--scale', type=float, help='Params scale factor', default=None)
     parser.add_argument('--epoch', type=int, help='Number of epochs.', default=None)
     parser.add_argument('--save_dir', type=str, help='Path to the save directory', default="../notebooks/saved_models")
-    parser.add_argument('--net', type=str, help='Network. Supported ""efficientnet"", ""unet"", ""efficientnet-lite0""', default="unet")
-    
+    parser.add_argument('--net', type=str, help='Network. Supported ""efficientnet"", ""unet"", ""efficientnet-lite0""', default=None)
+    parser.add_argument('--seed', type=int, help='Simulation seed.', default=None)
  
     pargs=parser.parse_args()
 
@@ -50,6 +50,10 @@ def main():
     if pargs.net is not None:
         print("Using network: "+colored(pargs.net, "red"))
         cfg.net=pargs.net
+
+    if pargs.seed is not None:
+        print("Using seed: "+colored(pargs.seed, "red"))
+        cfg.seed=pargs.seed
 
     cfg.save_dir=pargs.save_dir
     #Update save name and save path

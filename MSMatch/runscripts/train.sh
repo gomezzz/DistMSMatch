@@ -5,7 +5,7 @@ NET=unet #Options are efficientnet-lite0, efficientnet-b0, unet.
 BATCH_SIZE=16
 N_EPOCH=100                    
 WEIGHT_DECAY=0.00075
-LR=0.03 #0.03
+LR=0.01 #0.01
 RED='\033[0;31m'
 BLACK='\033[0m'
 #create save location
