@@ -36,6 +36,7 @@ def get_default_cfg():
     cfg.multiprocessing_distributed = False
     cfg.num_eval_iter = 1000
     cfg.scale=1
+    cfg.epoch=100
 
     dir_name = create_dir_str(cfg)
     cfg.save_name = os.path.join(cfg.save_name_root, dir_name)
