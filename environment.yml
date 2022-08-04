@@ -21,3 +21,7 @@ dependencies:
 - toml
 - papermill
 - matplotlib
+- pip
+- pip:
+  - efficientnet_lite_pytorch
+  - efficientnet_lite0_pytorch_model
