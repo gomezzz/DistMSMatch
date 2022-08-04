@@ -38,7 +38,7 @@ Distributed Semi-Supervised Multispectral Scene Classification with Few Labels
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-This is the code for the to realize a distributed version of [MSMatch](https://github.com/gomezzz/MSMatch). The repository includes an implementation of [FixMatch](https://arxiv.org/abs/2001.07685) for the training of different  Convolutional Neural Networks, including [Unet](https://arxiv.org/abs/1505.04597), [EfficientNet](https://arxiv.org/abs/1905.11946) and [EfficientNet Lite](https://tfhub.dev/s?deployment-format=lite&q=efficientnet%20lite). The code builds on and extends the [FixMatch-pytorch](https://github.com/LeeDoYup/FixMatch-pytorch) implementation based on [PyTorch](https://pytorch.org/). 
+This is the code for to realize a distributed version of [MSMatch](https://github.com/gomezzz/MSMatch). The repository includes an implementation of [FixMatch](https://arxiv.org/abs/2001.07685) for the semi-supervised training of different convolutional neural networks, including a [U-Net Encoder](https://arxiv.org/abs/1505.04597), [EfficientNet](https://arxiv.org/abs/1905.11946) and [EfficientNet Lite](https://tfhub.dev/s?deployment-format=lite&q=efficientnet%20lite) to perform scene classification on the [EuroSAT](https://github.com/phelber/EuroSAT) dataset. The code builds on and extends the [FixMatch-pytorch](https://github.com/LeeDoYup/FixMatch-pytorch) implementation based on [PyTorch](https://pytorch.org/). 
 ### Built With
 
 * [PyTorch](https://pytorch.org/)
