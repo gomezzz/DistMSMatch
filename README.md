@@ -72,11 +72,6 @@ We recommend using [conda](https://docs.conda.io/en/latest/) to set-up your envi
    ```sh
    conda env create -f environment.yml
    ```
-4. Install [EfficientNet Lite PyTorch](https://pypi.org/project/efficientnet-lite-pytorch/)
-    ```
-    pip install efficientnet_lite_pytorch
-    pip install efficientnet_lite0_pytorch_model
-    ```
 
 ### Set up datasets
 To launch the training on `EuroSAT (rgb)`, it is necessary to download the corresponding datasets. The `root_dir` variable in the `datasets/EurosatRGBDataset.py` files shall be adjusted according to the dataset path. 
