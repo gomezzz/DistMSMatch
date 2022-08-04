@@ -7,7 +7,7 @@ uratio = 7
 weight_decay = 7.5e-4
 ulb_loss_ratio = 1.0
 seed = 42
-num_labels = 50
+num_labels = 100
 opt = "SGD"
 save_dir = "./saved_models"
 save_name_root = "test"
@@ -21,6 +21,5 @@ pretrained = false
 hard_label = true
 multiprocessing_distributed = false
 num_eval_iter = 1000
-scale=1
-
+scale=0.5
 
