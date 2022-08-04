@@ -47,7 +47,7 @@ This is the code for to realize a distributed version of [MSMatch](https://githu
 * [EfficientNet Lite PyTorch](https://pypi.org/project/efficientnet-lite-pytorch/)
 * [albumentations](https://github.com/albumentations-team/albumentations)
 * [papermill](https://papermill.readthedocs.io/en/latest/)
-* imageio, numpy, pandas
+* [imageio](https://github.com/imageio/imageio), [numpy](https://numpy.org/), [pandas](https://pandas.pydata.org/)
 
 <!-- GETTING STARTED -->
 ## Getting Started
@@ -74,7 +74,7 @@ We recommend using [conda](https://docs.conda.io/en/latest/) to set-up your envi
    ```
 
 ### Set up datasets
-To launch the training on `EuroSAT (rgb)`, it is necessary to download the corresponding datasets. The `root_dir` variable in the `datasets/EurosatRGBDataset.py` files shall be adjusted according to the dataset path. 
+To launch the training on `EuroSAT (rgb)`, it is necessary to download the corresponding datasets. Please place the dataset in `/data/EuroSAT_RGB`.  Alternatively, you can change the `root_dir` variable in the `datasets/EurosatRGBDataset.py` to point to the dataset. The dataset can be download [here](https://github.com/phelber/EuroSAT). 
 
 ### Run training
 To run the training, you can exploit the `run_notebook.py` script to run a notebook. The `Baseline.ipynb` notebook contains the `MSMatch`baseline. Different configurations files in `.toml` format can be used to set-up the different `MsMatch`hyperparameters. 
