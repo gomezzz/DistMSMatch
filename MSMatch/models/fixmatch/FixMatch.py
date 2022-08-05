@@ -7,6 +7,8 @@ from tqdm import tqdm
 from ...utils.consistency_loss import consistency_loss
 from ...utils.cross_entropy_loss import cross_entropy_loss
 from ...utils.accurarcy import accuracy
+from ...utils.save_cfg import save_cfg
+
 
 
 class FixMatch:
@@ -212,7 +214,7 @@ class FixMatch:
             ):
 
                 if self.it == best_it:
-                    self.save_model("model_best.pth", save_path)
+                    self.save_run("model_best.pth", save_path, cfg=None)
 
                 if not self.tb_log is None:
                     self.tb_log.update(tb_dict, self.it)
@@ -259,7 +261,7 @@ class FixMatch:
             "eval/top-1-acc": total_acc / total_num,
         }
 
-    def save_model(self, save_name, save_path):
+    def save_run(self, save_name, save_path, cfg=None):
         save_filename = os.path.join(save_path, save_name)
         train_model = (
             self.train_model.module
@@ -281,6 +283,9 @@ class FixMatch:
             },
             save_filename,
         )
+
+        if cfg is not None:
+            save_cfg(cfg)
 
         self.print_fn(f"model saved: {save_filename}")
 

@@ -1,12 +1,12 @@
-name: msmatch
+name: distmsmatch
 channels:
 - conda-forge
 - pytorch
 dependencies:
-- cudatoolkit
+- cudatoolkit==10.2
 - python
-- pytorch
-- torchvision
+- pytorch==1.11.0
+- torchvision==0.12.0
 - pillow
 - tqdm
 - numpy
@@ -15,3 +15,13 @@ dependencies:
 - imageio
 - efficientnet-pytorch
 - albumentations
+- tensorboard
+- dotmap
+- termcolor
+- toml
+- papermill
+- matplotlib
+- pip
+- pip:
+  - efficientnet_lite_pytorch
+  - efficientnet_lite0_pytorch_model
