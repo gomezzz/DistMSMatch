@@ -10,7 +10,6 @@ from .utils.save_cfg import save_cfg
 from .utils.print_cfg import print_cfg
 
 
-
 from .datasets.BasicDataset import BasicDataset
 from .datasets.EurosatRGBDataset import EurosatRGBDataset
 from .datasets.SSL_Dataset import SSL_Dataset
