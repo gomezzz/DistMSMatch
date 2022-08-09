@@ -16,7 +16,7 @@ def get_default_cfg():
     cfg.net = "unet"
     cfg.batch_size = 32
     cfg.p_cutoff = 0.95
-    cfg.lr = 0.01
+    cfg.lr = 0.0075
     cfg.uratio = 7
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
@@ -24,8 +24,7 @@ def get_default_cfg():
     cfg.num_labels = 100
     cfg.opt = "SGD"
     cfg.pretrained = False
-    cfg.save_dir = "./saved_models"
-    cfg.save_name_root = "test"
+    cfg.save_dir = "../results/"
     cfg.ema_m = 0.999
     cfg.bn_momentum = 1.0 - cfg.ema_m
     cfg.eval_batch_size = 1024
@@ -35,11 +34,10 @@ def get_default_cfg():
     cfg.hard_label = True
     cfg.multiprocessing_distributed = False
     cfg.num_eval_iter = 1000
-    cfg.scale=1
-    cfg.epoch=100
+    cfg.scale = 1
+    cfg.epoch = 100
 
     dir_name = create_dir_str(cfg)
-    cfg.save_name = os.path.join(cfg.save_name_root, dir_name)
-    cfg.save_path = os.path.join(cfg.save_dir, cfg.save_name)
+    cfg.save_path = os.path.join(cfg.save_dir, dir_name)
 
     return cfg

@@ -10,7 +10,6 @@ seed = 42
 num_labels = 50
 opt = "SGD"
 save_dir = "./saved_models"
-save_name_root = "test"
 ema_m = 0.999
 eval_batch_size = 1024
 momentum = 0.9

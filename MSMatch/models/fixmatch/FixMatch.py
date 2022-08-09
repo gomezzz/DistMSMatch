@@ -3,12 +3,12 @@ import torch.nn.functional as F
 
 import os
 from tqdm import tqdm
+from pathlib import Path
 
 from ...utils.consistency_loss import consistency_loss
 from ...utils.cross_entropy_loss import cross_entropy_loss
 from ...utils.accurarcy import accuracy
 from ...utils.save_cfg import save_cfg
-
 
 
 class FixMatch:
@@ -195,8 +195,6 @@ class FixMatch:
                 eval_dict = self.evaluate(cfg=cfg)
                 tb_dict.update(eval_dict)
 
-                save_path = os.path.join(cfg.save_dir, cfg.save_name)
-
                 if tb_dict["eval/top-1-acc"] > best_eval_acc:
                     best_eval_acc = tb_dict["eval/top-1-acc"]
                     best_it = self.it
@@ -214,7 +212,7 @@ class FixMatch:
             ):
 
                 if self.it == best_it:
-                    self.save_run("model_best.pth", save_path, cfg=None)
+                    self.save_run("model_best.pth", cfg.save_path, cfg=None)
 
                 if not self.tb_log is None:
                     self.tb_log.update(tb_dict, self.it)
@@ -263,6 +261,10 @@ class FixMatch:
 
     def save_run(self, save_name, save_path, cfg=None):
         save_filename = os.path.join(save_path, save_name)
+
+        # Create subfolder if it does not exist
+        Path(save_path).mkdir(parents=True, exist_ok=True)
+
         train_model = (
             self.train_model.module
             if hasattr(self.train_model, "module")
