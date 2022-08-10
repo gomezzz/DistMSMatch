@@ -13,10 +13,10 @@ def get_default_cfg():
     """
     cfg = DotMap(_dynamic=False)
     cfg.dataset = "eurosat_rgb"
-    cfg.net = "unet"
+    cfg.net = "efficientnet-lite0"
     cfg.batch_size = 32
     cfg.p_cutoff = 0.95
-    cfg.lr = 0.0075
+    cfg.lr = 0.01
     cfg.uratio = 7
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
