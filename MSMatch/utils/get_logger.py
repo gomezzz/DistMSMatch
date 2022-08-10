@@ -1,18 +1,17 @@
 import logging, os
 
 
-def get_logger(name, save_path=None, level="INFO"):
+def get_logger(save_path=None, level="INFO"):
     """Initializes the logger
 
     Args:
-        name (str): logger name
         save_path (str, optional): path to save the log file. Defaults to None.
         level (str, optional): Logging level. Defaults to "INFO".
 
     Returns:
         Logger: the created logger
     """
-    logger = logging.getLogger(name)
+    logger = logging.getLogger("MSMatch")
     logger.setLevel(getattr(logging, level))
 
     log_format = logging.Formatter("[%(asctime)s %(levelname)s] %(message)s")
