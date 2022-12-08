@@ -13,14 +13,25 @@ from tqdm import tqdm
 class EurosatRGBDataset(torch.utils.data.Dataset):
     """EurosatRGB dataset"""
 
-    def __init__(self, train, root_dir="../data/EuroSAT_RGB/", transform=None, seed=42):
-        """
+    def __init__(
+        self,
+        train,
+        root_dir="../data/EuroSAT_RGB/",
+        transform=None,
+        seed=42,
+        nodes=1,
+        alpha=None,
+    ):
+        """_summary_
+
         Args:
             train (bool): If true returns training set, else test
             root_dir (string): Directory with all the images.
             transform (callable, optional): Optional transform to be applied
                 on a sample.
             seed (int): seed used for train/test split
+            nodes (int, optional): number of nodes to split data across. Defaults to 1.
+            alpha (_type_, optional): parameter in [0,1] to decide heterogeneity in data partitioning. Heterogeneity increases towards 0. Defaults to None.
         """
         self.seed = seed
         self.size = [64, 64]
@@ -31,6 +42,8 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         self.test_ratio = 0.1
         self.train = train
         self.N = 27000
+        self.nodes = nodes
+        self.alpha = alpha
         self._load_data()
 
     def _load_data(self):
@@ -73,14 +86,19 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         labels = np.asarray(labels)
         self.label_encoding = list(le.classes_)  # remember label encoding
 
-        # split into a train and test set as provided data is not presplit
-        X_train, X_test, y_train, y_test = train_test_split(
-            images,
-            labels,
-            test_size=self.test_ratio,
-            random_state=self.seed,
-            stratify=labels,
-        )
+        # THIS IS WHERE PARTITIONING SHOULD GO
+        if self.nodes > 1:
+            node_dataidx_map, _ = self._partition_data(labels)
+
+        else:
+            # split into a train and test set as provided data is not presplit
+            X_train, X_test, y_train, y_test = train_test_split(
+                images,
+                labels,
+                test_size=self.test_ratio,
+                random_state=self.seed,
+                stratify=labels,
+            )
 
         if self.train:
             self.data = X_train
@@ -88,6 +106,63 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         else:
             self.data = X_test
             self.targets = y_test
+
+    def _partition_data(self, labels):
+        """Partition the dataset over the nodes
+
+        Args:
+            labels (_type_): labels in the original dataset
+
+        Returns:
+            _type_: _description_
+        """
+        n_labels = labels.shape[0]
+        class_num = np.unique(labels)
+
+        if self.alpha is None:
+            idxs = np.random.permutation(n_labels)
+            node_idxs = np.array_split(idxs, self.nodes)
+            node_dataidx_map = {i: node_idxs[i] for i in range(self.nodes)}
+
+        else:
+            min_size = 0
+            node_dataidx_map = {}
+
+            while min_size < 10:
+                idx_batch = [[] for _ in range(self.nodes)]
+
+                # divide each label among the different nodes
+                for k in range(class_num):
+                    idx_k = np.where(labels == k)[0]
+                    np.random.shuffle(idx_k)
+                    proportions = np.random.dirichlet(np.repeat(self.alpha, self.nodes))
+                    ## Balance
+                    proportions = np.array(
+                        [
+                            p * (len(idx_j) < n_labels / self.nodes)
+                            for p, idx_j in zip(proportions, idx_batch)
+                        ]
+                    )
+                    proportions = proportions / proportions.sum()
+                    proportions = (np.cumsum(proportions) * len(idx_k)).astype(int)[:-1]
+                    idx_batch = [
+                        idx_j + idx.tolist()
+                        for idx_j, idx in zip(idx_batch, np.split(idx_k, proportions))
+                    ]
+                    min_size = min([len(idx_j) for idx_j in idx_batch])
+
+            for j in range(self.nodes):
+                np.random.shuffle(idx_batch[j])
+                node_dataidx_map[j] = idx_batch[j]
+
+        # count the number of data points in each classes for each node
+        node_cls_counts = {}
+        for node_i, dataidx in node_dataidx_map.items():
+            unq, unq_cnt = np.unique(labels[dataidx], return_counts=True)
+            tmp = {unq[i]: unq_cnt[i] for i in range(len(unq))}
+            node_cls_counts[node_i] = tmp
+
+        return node_dataidx_map, node_cls_counts
 
     def __len__(self):
         return len(self.data)
