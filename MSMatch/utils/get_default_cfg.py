@@ -36,6 +36,8 @@ def get_default_cfg():
     cfg.num_eval_iter = 1000
     cfg.scale = 1
     cfg.epoch = 100
+    cfg.alpha = 1.0
+    cfg.nodes = 2
 
     dir_name = create_dir_str(cfg)
     cfg.save_path = os.path.join(cfg.save_dir, dir_name)
