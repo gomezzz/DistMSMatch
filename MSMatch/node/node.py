@@ -20,12 +20,19 @@ from paseos import ActorBuilder, SpacecraftActor
 import scatterbrained as sb
 
 class Node:
+    
+    _local_time = None
+    
     def __init__(
         self,
         node_indx, 
         cfg,
         dataloader,
-        logger
+        logger,
+        host_ip = "127.0.0.1", 
+        tx_port = 4001,
+        rx_port = 4002,
+        heartbeat_intrvl = 2
     ):
     
         super(Node, self).__init__()
@@ -61,15 +68,15 @@ class Node:
         # Instantiate metadata
         self.metadata = self.sat.get_position_velocity(pk.epoch(0))
 
-        # # create network layer
-        # self.host_ip = host_ip
-        # self.tx_port = tx_port
-        # self.rx_port = rx_port
-        # self.metadata = metadata
-        # self.heartbeat = heartbeat
-        # self.tx_tasks = []
-        # self.rx_tasks = []
-        # self.discovered_peers = None
+        # create network layer
+        self.host_ip = host_ip
+        self.tx_port = tx_port
+        self.rx_port = rx_port
+        self.heartbeat_intrvl = heartbeat_intrvl
+        self.tx_tasks = []
+        self.rx_tasks = []
+        self.discovered_peers = None
+        self.network_mngr = self._initiate_network_engine()
 
         # Register activities
         self.paseos.register_activity(
@@ -87,7 +94,9 @@ class Node:
         )
 
         
-        # Set up network layer on node
+
+    def local_time(self) -> float:
+        return self.paseos._local_actor.local_time.mjd2000 * pk.DAY2SEC
     
     def _create_model(self):
         net_builder = get_net_builder(
@@ -134,23 +143,15 @@ class Node:
         de = sb.discovery.DiscoveryEngine(
             publisher=sb.discovery.UDPBroadcaster(self.host_ip, port=self.tx_port),
             subscriber=sb.discovery.UDPReceiver(self.host_ip, port=self.rx_port),
-            heartbeat=self.heartbeat,
+            heartbeat=self.heartbeat_intrvl,
         )
 
-        if filter_fn is None:
-
-            def default_filter_fn(peer: sb.types.Identity):
-                return True
-
-            filter_fn = default_filter_fn
-
         # create the node
-        self.network_mngr = sb.Node(
+        return sb.Node(
             id=self.id,
             host=self.host_ip,
             discovery_engine=de,
-            metadata=self.metadata,
-            default_peer_filter=filter_fn,
+            metadata=self.metadata
         )
     
     def save_model(self):

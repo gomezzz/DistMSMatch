@@ -4,48 +4,29 @@ sys.path.append("..")
 # Main imports
 import asyncio
 import torch
-import copy
 import MSMatch as mm
+import numpy as np
 
-async def space_main(node: mm.Node):
-    """Main loop. The actor is updating its connections in preset intervals and attempts transmit/receive each time.
-    If reception successful, the client will perform federated averaging with equal weights.
+def sync_nodes(nodes:list[mm.Node]):
+    t_n = [node.local_time() for node in nodes] # get local time for each node
+    extra_time = [np.maximum(t_n) - t for t in t_n] # find out how much each node must proceed to sync
+    map(lambda n,t: n.advance_time(t), zip(nodes, extra_time)) # advance time of each node
 
-    Args:
-        client (SpaceClient): The local client
-    """
-    STEPS = 100
-    t = 0
+async def main_loop(nodes: list[mm.Node], cfg):
+    
+    # Start by training all models locally
+    for node in nodes:
+        node.paseos.perform_activity("Train")
+        await node.wait_for_activity()
 
-    # start by training once locally
-    node.paseos.perform_activity("Train")
-    await node.wait_for_activity()
-
-    node.paseos.perform_activity("Evaluate")
-    await node.wait_for_activity()
-
-    # Start network engines to listen for new actors
-    async with node.network_mngr as node:
-        async with node.namespace(name="swarm") as ns:
-            while t < STEPS:
-                # update connections within the namespace
-                node.update_connections(ns.name)
-
-                logger.debug(f"Iteration {t}")
-
-                # Check if there are spacecrafts within LOS, if so transmit and receive
-                node.paseos.perform_activity(
-                    "Transmit_Receive", activity_func_args=[ns]
-                )
-                await node.wait_for_activity()
-
-                if node.model_updated is True:
-                    node.paseos.perform_activity("Train")
-                    await node.wait_for_activity()
-                    node.paseos.perform_activity("Evaluate")
-                    await node.wait_for_activity()
-
-                await asyncio.sleep(0.1)
+        node.paseos.perform_activity("Evaluate")
+        await node.wait_for_activity()
+    
+    sync_nodes(nodes)
+    
+       
+        
+        
 
 if __name__ == '__main__':
     cfg_path=None
@@ -77,16 +58,5 @@ if __name__ == '__main__':
         nodes.append(node)
 
     # do training
-    for r in range(cfg.training_rounds):
-        logger.info(f"Training round {r}")
-
-        for node in nodes:
-            node.train()
-
-        models_before_aggr = [copy.deepcopy(n.model.train_model) for n in nodes]
-        index_list = list(range(cfg.nodes))
-        for i in index_list:
-            loc_index_list = list(set(index_list) - set([i]))
-            neighbor_models = [models_before_aggr[i] for i in loc_index_list]
-            nodes[i].aggregate(neighbor_models)
-        del(models_before_aggr)
+    asyncio.run(main_loop(nodes))
+    

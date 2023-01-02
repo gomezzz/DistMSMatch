@@ -38,8 +38,8 @@ def get_default_cfg():
     cfg.scale = 1
     cfg.training_rounds = 50
     cfg.alpha = 100
-    cfg.nodes = 8
-    cfg.thread_number = 8
+    cfg.nodes = 2
+    cfg.thread_number = 2
 
     dir_name = create_dir_str(cfg)
     cfg.save_path = os.path.join(cfg.save_dir, dir_name)
