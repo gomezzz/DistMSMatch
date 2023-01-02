@@ -16,7 +16,7 @@ def get_default_cfg():
     cfg.net = "efficientnet-lite0"
     cfg.batch_size = 32
     cfg.p_cutoff = 0.95
-    cfg.lr = 0.01
+    cfg.lr = 0.03
     cfg.uratio = 7
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
@@ -33,11 +33,13 @@ def get_default_cfg():
     cfg.amp = False
     cfg.hard_label = True
     cfg.multiprocessing_distributed = False
-    cfg.num_eval_iter = 1000
+    cfg.num_eval_iter = 250 # iterations in an epoch
+    cfg.local_epochs = 5
     cfg.scale = 1
-    cfg.epoch = 100
-    cfg.alpha = 1.0
-    cfg.nodes = 2
+    cfg.training_rounds = 50
+    cfg.alpha = 100
+    cfg.nodes = 8
+    cfg.thread_number = 8
 
     dir_name = create_dir_str(cfg)
     cfg.save_path = os.path.join(cfg.save_dir, dir_name)

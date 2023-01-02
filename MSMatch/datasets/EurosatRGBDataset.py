@@ -23,7 +23,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         seed=42,
         nodes=2,
         alpha=0.2,
-        node_idx = 1
+        node_indx = 1
     ):
         """_summary_
 
@@ -47,7 +47,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         self.N = 27000
         self.nodes = nodes
         self.alpha = alpha
-        self.node_idx = node_idx
+        self.node_indx = node_indx
         self.data_exist = False
         self._load_data()
 
@@ -120,9 +120,9 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
             node_dataidx_map = self._partition_data(y_train)
             
             # save training data for each node
-            for node_idx in node_dataidx_map:
-                file_name = data_folder + f"/node_{node_idx}"
-                data_idxs = node_dataidx_map[node_idx]
+            for node_indx in node_dataidx_map:
+                file_name = data_folder + f"/node_{node_indx}"
+                data_idxs = node_dataidx_map[node_indx]
                 np.save(file_name + "_data", X_train[data_idxs,:,:,:])
                 np.save(file_name + "_labels", y_train[data_idxs])
             # save test data
@@ -131,7 +131,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         
         # load data from folder
         if self.train:   
-            client_data_folder = data_folder + f"/node_{self.node_idx}"
+            client_data_folder = data_folder + f"/node_{self.node_indx}"
             self.data = np.load(client_data_folder + "_data.npy")
             self.targets = np.load(client_data_folder + "_labels.npy")
         else:
@@ -139,6 +139,10 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
             self.targets = np.load(data_folder + "/test-labels.npy")
         
         self.cls_counts = self._node_cls_count()
+        if self.train: 
+            print(f"Node {self.node_indx} train label distribution:{self.cls_counts}")
+        else:
+            print(f"Node {self.node_indx} test label distribution:{self.cls_counts}")
         
 
     def _look_for_data(self):

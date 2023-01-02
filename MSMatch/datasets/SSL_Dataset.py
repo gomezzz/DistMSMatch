@@ -62,7 +62,7 @@ class SSL_Dataset:
     and return BasicDataset: torch.utils.data.Dataset (see datasets.dataset.py)
     """
 
-    def __init__(self, name="eurosat_rgb", train=True, data_dir="./data", seed=42, alpha=1.0, nodes = 1):
+    def __init__(self, name="eurosat_rgb", train=True, data_dir="./data", seed=42, alpha=1.0, nodes = 1, node_indx = 1):
         """
         Args
             name: name of dataset
@@ -79,6 +79,7 @@ class SSL_Dataset:
         self.inv_transform = get_inverse_transform(mean[name], std[name])
         self.alpha = alpha
         self.nodes = nodes
+        self.node_indx = node_indx
 
         self.use_ms_augmentations = False
         # need to use different augmentations for multispectral
@@ -90,7 +91,7 @@ class SSL_Dataset:
         get_data returns data (images) and targets (labels)
         """
         if self.name == "eurosat_rgb":
-            dset = EurosatRGBDataset(train=self.train, seed=self.seed, alpha=self.alpha, nodes = self.nodes)
+            dset = EurosatRGBDataset(train=self.train, seed=self.seed, alpha=self.alpha, nodes = self.nodes, node_indx=self.node_indx)
         # elif self.name == "eurosat_ms":
         #     dset = EurosatDataset(train=self.train, seed=self.seed)
         else:

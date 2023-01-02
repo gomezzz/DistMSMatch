@@ -15,11 +15,13 @@ from .datasets.EurosatRGBDataset import EurosatRGBDataset
 from .datasets.SSL_Dataset import SSL_Dataset
 from .datasets.data_utils import get_data_loader
 from .models.fixmatch.FixMatch import FixMatch
+from .node.node import Node
 
 __all__ = [
     "BasicDataset",
     "EurosatRGBDataset",
     "FixMatch",
+    "Node",
     "get_cosine_schedule_with_warmup",
     "get_data_loader",
     "get_default_cfg",

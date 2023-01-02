@@ -116,21 +116,34 @@ class FixMatch:
         # lb: labeled, ulb: unlabeled
         self.train_model.train()
 
-        total_epochs = cfg.num_train_iter // cfg.num_eval_iter
+        total_local_epochs = (cfg.num_train_iter // cfg.num_eval_iter)-1
+        
+        self.it = 1
         curr_epoch = 0
         progressbar = tqdm(
-            desc=f"Epoch {curr_epoch}/{total_epochs}", total=cfg.num_eval_iter
+            desc=f"epoch {curr_epoch}/{total_local_epochs}", total=cfg.num_eval_iter
         )
-
+        
         best_eval_acc, best_it = 0.0, 0
 
-        for (x_lb, y_lb), (x_ulb_w, x_ulb_s, _) in zip(
-            self.loader_dict["train_lb"], self.loader_dict["train_ulb"]
-        ):
-
+        lb_iterator = iter(self.loader_dict["train_lb"]) # iterator for labeled data
+        
+        for (x_ulb_w, x_ulb_s, _) in self.loader_dict["train_ulb"]:
+            
             # prevent the training iterations exceed cfg.num_train_iter
             if self.it > cfg.num_train_iter:
                 break
+
+            # sample a batch of labeled data
+            try:
+                (x_lb, y_lb) = next(lb_iterator)
+            except StopIteration:
+                lb_iterator = iter(self.loader_dict["train_lb"]) 
+                (x_lb, y_lb) = next(lb_iterator)
+            
+            self.train_model.zero_grad()
+
+            
 
             num_lb = x_lb.shape[0]
             num_ulb = x_ulb_w.shape[0]
@@ -167,9 +180,8 @@ class FixMatch:
             # parameter updates
             total_loss.backward()
             self.optimizer.step()
-
             self.scheduler.step()
-            self.train_model.zero_grad()
+            
 
             with torch.no_grad():
                 self._eval_model_update()
@@ -188,7 +200,7 @@ class FixMatch:
             progressbar.set_postfix_str(f"Total Loss={total_loss.detach():.3e}")
             progressbar.update(1)
 
-            if self.it % self.num_eval_iter == 0:
+            if self.it % self.num_eval_iter == 0 and self.it > 0:
                 progressbar.close()
                 curr_epoch += 1
 
@@ -199,23 +211,23 @@ class FixMatch:
                     best_eval_acc = tb_dict["eval/top-1-acc"]
                     best_it = self.it
 
-                self.print_fn(
-                    f"{self.it} iteration, USE_EMA: {hasattr(self, 'eval_model')}, {tb_dict}, BEST_EVAL_ACC: {best_eval_acc}, at {best_it} iters"
-                )
+                # self.print_fn(
+                #     f"{self.it} iteration, USE_EMA: {hasattr(self, 'eval_model')}, {tb_dict}, BEST_EVAL_ACC: {best_eval_acc}, at {best_it} iters"
+                # )
+                if self.it < cfg.num_train_iter:
+                    progressbar = tqdm(
+                        desc=f"epoch {curr_epoch}/{total_local_epochs}", total=cfg.num_eval_iter
+                    )
 
-                progressbar = tqdm(
-                    desc=f"Epoch {curr_epoch}/{total_epochs}", total=cfg.num_eval_iter
-                )
+            # if not cfg.multiprocessing_distributed or (
+            #     cfg.multiprocessing_distributed and cfg.rank % ngpus_per_node == 0
+            # ):
 
-            if not cfg.multiprocessing_distributed or (
-                cfg.multiprocessing_distributed and cfg.rank % ngpus_per_node == 0
-            ):
+            #     if self.it == best_it:
+            #         self.save_run("model_best.pth", cfg.save_path, cfg=None)
 
-                if self.it == best_it:
-                    self.save_run("model_best.pth", cfg.save_path, cfg=None)
-
-                if not self.tb_log is None:
-                    self.tb_log.update(tb_dict, self.it)
+            #     if not self.tb_log is None:
+            #         self.tb_log.update(tb_dict, self.it)
 
             self.it += 1
             del tb_dict
@@ -230,7 +242,7 @@ class FixMatch:
     def evaluate(self, eval_loader=None, cfg=None):
         torch.cuda.empty_cache()
         use_ema = hasattr(self, "eval_model")
-
+        
         eval_model = self.eval_model if use_ema else self.train_model
         eval_model.eval()
         if eval_loader is None:
