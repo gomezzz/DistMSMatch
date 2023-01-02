@@ -2,62 +2,50 @@ import sys
 sys.path.append("..")
 
 # Main imports
+import asyncio
 import torch
 import copy
 import MSMatch as mm
-from termcolor import colored
 
-def create_dataloaders(cfg):
+async def space_main(node: mm.Node):
+    """Main loop. The actor is updating its connections in preset intervals and attempts transmit/receive each time.
+    If reception successful, the client will perform federated averaging with equal weights.
 
-    node_dls = []
-    for node_indx in range(cfg.nodes):
-        print("Loading "+colored("train", "red")+ " dataset...")
-        train_dset = mm.SSL_Dataset(
-            name=cfg.dataset, train=True, data_dir=None, seed=cfg.seed, alpha=cfg.alpha, nodes=cfg.nodes, node_indx=node_indx
-        )
-        
-        lb_dset, ulb_dset = train_dset.get_ssl_dset(cfg.num_labels)
-        
-        if node_indx == 0:
-            cfg.num_classes = train_dset.num_classes
-            cfg.num_channels = train_dset.num_channels
+    Args:
+        client (SpaceClient): The local client
+    """
+    STEPS = 100
+    t = 0
 
-        print(f"Loading node {node_indx} "+colored("eval", "blue")+ " dataset...")
-        _eval_dset = mm.SSL_Dataset(
-            name=cfg.dataset, train=False, data_dir=None, seed=cfg.seed, alpha=cfg.alpha, nodes=cfg.nodes, node_indx=node_indx
-        )
-        eval_dset = _eval_dset.get_dset()
+    # start by training once locally
+    node.paseos.perform_activity("Train")
+    await node.wait_for_activity()
 
-        loader_dict = {}
-        dset_dict = {"train_lb": lb_dset, "train_ulb": ulb_dset, "eval": eval_dset}
+    node.paseos.perform_activity("Evaluate")
+    await node.wait_for_activity()
 
-        loader_dict["train_lb"] = mm.get_data_loader(
-            dset_dict["train_lb"],
-            cfg.batch_size,
-            data_sampler="RandomSampler",
-            num_iters=cfg.num_train_iter,
-            num_workers=1,
-            distributed=False,
-        )
+    # Start network engines to listen for new actors
+    async with node.network_mngr as node:
+        async with node.namespace(name="swarm") as ns:
+            while t < STEPS:
+                # update connections within the namespace
+                node.update_connections(ns.name)
 
-        loader_dict["train_ulb"] = mm.get_data_loader(
-            dset_dict["train_ulb"],
-            cfg.batch_size * cfg.uratio,
-            data_sampler="RandomSampler",
-            num_iters=cfg.num_train_iter,
-            num_workers=4,
-            distributed=False,
-        )
+                logger.debug(f"Iteration {t}")
 
-        loader_dict["eval"] = mm.get_data_loader(
-            dset_dict["eval"], cfg.eval_batch_size, num_workers=1
-        )
-        node_dls.append(loader_dict)
-    return node_dls, cfg
+                # Check if there are spacecrafts within LOS, if so transmit and receive
+                node.paseos.perform_activity(
+                    "Transmit_Receive", activity_func_args=[ns]
+                )
+                await node.wait_for_activity()
 
+                if node.model_updated is True:
+                    node.paseos.perform_activity("Train")
+                    await node.wait_for_activity()
+                    node.paseos.perform_activity("Evaluate")
+                    await node.wait_for_activity()
 
-
-
+                await asyncio.sleep(0.1)
 
 if __name__ == '__main__':
     cfg_path=None
@@ -70,7 +58,6 @@ if __name__ == '__main__':
     mm.set_seeds(cfg.seed)
     logger_level = "INFO"
     logger = mm.get_logger(cfg.save_path, logger_level)
-    tb_log = mm.TensorBoardLog(cfg.save_path, "")
     
     # Number of training iterations per round is based on local epochs and how regularly we evaluate the model.
     # Note that batch size here only refers to the supervised part, so the real batch size
@@ -78,7 +65,7 @@ if __name__ == '__main__':
     cfg.num_train_iter = cfg.local_epochs * cfg.num_eval_iter * 32 // cfg.batch_size
     
     # Create dataloaders for all nodes
-    node_dls, cfg = create_dataloaders(cfg)
+    node_dls, cfg = mm.create_node_dataloaders(cfg)
     
     # Create nodes
     nodes = []
@@ -86,8 +73,7 @@ if __name__ == '__main__':
         node = mm.Node(i, 
             cfg,
             node_dls[i],
-            logger,
-            tb_log)
+            logger)
         nodes.append(node)
 
     # do training

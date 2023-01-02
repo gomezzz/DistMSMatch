@@ -23,7 +23,14 @@ dependencies:
 - matplotlib
 - jupyter
 - pip
+# PASEOS req
 - pykep
+# scatterbrained req
+- rx
+- orjson
+- pyzmq
+- attrs
+- uvloop
 - pip:
   - efficientnet_lite_pytorch
   - efficientnet_lite0_pytorch_model
