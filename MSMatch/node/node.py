@@ -34,6 +34,7 @@ class BaseNode:
         self.logger = logger
         save_path = os.path.join(cfg.save_dir, f"node {self.node_indx}")
         self.tb_log = TensorBoardLog(save_path, "")
+        self.accuracy = []
         
         # Create model
         self.model = self._create_model()
@@ -81,6 +82,9 @@ class BaseNode:
     
     def save_model(self):
         self.model.save_run("latest_model.pth", self.cfg.save_path, self.cfg)
+        
+    def save_history(self):
+        np.save(self.save_path, self.accuracy)
 
     def aggregate(self, rx_models):
         self.logger.info(f"Node {self.node_indx}: aggregating neighbor models")
@@ -176,6 +180,7 @@ class PaseosNode(BaseNode):
         self.logger.info(f"Node {self.node_indx} training")
         result = self.model.train(self.cfg)
         self.logger.info(f"post training acc: {result['eval/top-1-acc']}")
+        self.accuracy.append(result['eval/top-1-acc'])
         
     async def evaluate(self, args):
         return self.model.evaluate(cfg=self.cfg)

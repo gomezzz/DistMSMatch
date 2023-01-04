@@ -62,6 +62,9 @@ async def main_loop(nodes: list[mm.BaseNode], cfg, logger):
             logger.info(f"Node {node.node_indx} merged with {neighbors}")
         sync_nodes(nodes)
     
+    for node in nodes:
+        node.save_history()
+    
     
        
 
