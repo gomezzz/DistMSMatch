@@ -33,13 +33,14 @@ def get_default_cfg():
     cfg.amp = False
     cfg.hard_label = True
     cfg.multiprocessing_distributed = False
-    cfg.num_eval_iter = 250 # iterations in an epoch
-    cfg.local_epochs = 5
+    cfg.num_eval_iter = 100 # iterations in an epoch
+    cfg.local_epochs = 1
     cfg.scale = 1
     cfg.training_rounds = 50
     cfg.alpha = 100
-    cfg.nodes = 2
-    cfg.thread_number = 2
+    cfg.nodes = 10
+    cfg.planes = 2
+    cfg.time_multiplier = 10
 
     dir_name = create_dir_str(cfg)
     cfg.save_path = os.path.join(cfg.save_dir, dir_name)
