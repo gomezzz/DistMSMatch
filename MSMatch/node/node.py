@@ -32,8 +32,8 @@ class BaseNode:
         self.cfg = cfg
         self.node_indx = node_indx
         self.logger = logger
-        save_path = os.path.join(cfg.save_dir, f"node {self.node_indx}")
-        self.tb_log = TensorBoardLog(save_path, "")
+        self.save_path = os.path.join(cfg.save_dir, f"node {self.node_indx}")
+        self.tb_log = TensorBoardLog(self.save_path, "")
         self.accuracy = []
         
         # Create model
@@ -180,7 +180,7 @@ class PaseosNode(BaseNode):
         self.logger.info(f"Node {self.node_indx} training")
         result = self.model.train(self.cfg)
         self.logger.info(f"post training acc: {result['eval/top-1-acc']}")
-        self.accuracy.append(result['eval/top-1-acc'])
+        self.accuracy.append(result['eval/top-1-acc'].cpu())
         
     async def evaluate(self, args):
         return self.model.evaluate(cfg=self.cfg)

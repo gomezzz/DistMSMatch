@@ -65,8 +65,6 @@ async def main_loop(nodes: list[mm.BaseNode], cfg, logger):
     for node in nodes:
         node.save_history()
     
-    
-       
 
 if __name__ == '__main__':
     cfg_path=None
