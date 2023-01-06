@@ -33,7 +33,7 @@ def get_default_cfg():
     cfg.amp = False
     cfg.hard_label = True
     cfg.multiprocessing_distributed = False
-    cfg.num_eval_iter = 100 # iterations in an epoch
+    cfg.num_eval_iter = 200 # iterations in an epoch
     cfg.local_epochs = 1
     cfg.scale = 1
     cfg.training_rounds = 100

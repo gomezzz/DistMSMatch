@@ -3,10 +3,10 @@ from .SSL_Dataset import SSL_Dataset
 from .data_utils import get_data_loader
 
 def create_node_dataloaders(cfg):
-    
+    print(colored("Loading datasets", "red"))
     node_dls = []
     for node_indx in range(cfg.nodes):
-        print("Loading "+colored("train", "red")+ " dataset...")
+        
         train_dset = SSL_Dataset(
             name=cfg.dataset, train=True, data_dir=None, seed=cfg.seed, alpha=cfg.alpha, nodes=cfg.nodes, node_indx=node_indx
         )
@@ -17,7 +17,6 @@ def create_node_dataloaders(cfg):
             cfg.num_classes = train_dset.num_classes
             cfg.num_channels = train_dset.num_channels
 
-        print(f"Loading node {node_indx} "+colored("eval", "blue")+ " dataset...")
         _eval_dset = SSL_Dataset(
             name=cfg.dataset, train=False, data_dir=None, seed=cfg.seed, alpha=cfg.alpha, nodes=cfg.nodes, node_indx=node_indx
         )
@@ -48,4 +47,5 @@ def create_node_dataloaders(cfg):
             dset_dict["eval"], cfg.eval_batch_size, num_workers=1
         )
         node_dls.append(loader_dict)
+        print(colored("---------------------------------------------------------------------------------------------------------------------------------", "red"))
     return node_dls, cfg

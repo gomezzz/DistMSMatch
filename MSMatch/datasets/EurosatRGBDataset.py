@@ -11,6 +11,7 @@ from tqdm import tqdm
 from datetime import datetime
 import json
 from dotmap import DotMap
+from .data_utils import split_ssl_data
 
 class EurosatRGBDataset(torch.utils.data.Dataset):
     """EurosatRGB dataset"""
@@ -21,6 +22,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         root_dir="./data/EuroSAT_RGB/",
         transform=None,
         seed=42,
+        num_labels=100,
         nodes=2,
         alpha=0.2,
         node_indx = 1
@@ -49,6 +51,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         self.alpha = alpha
         self.node_indx = node_indx
         self.data_exist = False
+        self.num_labels = num_labels
         self._load_data()
 
     def _load_data(self):
@@ -116,34 +119,45 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
             with open(data_folder + "/data_config.json", "w+") as f:
                 json.dump(data_config, f)
             
-            # Partition data between clients
-            node_dataidx_map = self._partition_data(y_train)
+            # divide training data into labeled and unlabeled data
+            lb_data, lb_targets, ulb_data, ulb_targets = split_ssl_data(
+                X_train, y_train, self.num_labels, self.num_classes, index=None, include_lb_to_ulb=False)
+        
             
-            # save training data for each node
+            # Partition unlabeled data between clients
+            node_dataidx_map = self._partition_data(ulb_targets)
+            
+            # save unlabeled training data for each node
             for node_indx in node_dataidx_map:
                 file_name = data_folder + f"/node_{node_indx}"
                 data_idxs = node_dataidx_map[node_indx]
-                np.save(file_name + "_data", X_train[data_idxs,:,:,:])
-                np.save(file_name + "_labels", y_train[data_idxs])
+                np.save(file_name + "ul-data", ulb_data[data_idxs,:,:,:])
+                np.save(file_name + "ul-targets", ulb_targets[data_idxs])
+            #save labeled data
+            np.save(data_folder + "/lb-data", lb_data)
+            np.save(data_folder + "/lb-targets", lb_targets)
             # save test data
             np.save(data_folder + "/test-data", X_test)
-            np.save(data_folder + "/test-labels", y_test)
+            np.save(data_folder + "/test-targets", y_test)
         
         # load data from folder
         if self.train:   
             client_data_folder = data_folder + f"/node_{self.node_indx}"
-            self.data = np.load(client_data_folder + "_data.npy")
-            self.targets = np.load(client_data_folder + "_labels.npy")
+            self.ul_data = np.load(client_data_folder + "ul-data.npy")
+            self.ul_targets = np.load(client_data_folder + "ul-targets.npy") # not used
+            
+            self.ul_cls_counts = self._node_cls_count(self.ul_targets)
+            print(f"Node {self.node_indx} unlabeled class distribution:{self.ul_cls_counts}")
+            
+            self.lb_data = np.load(data_folder + "/lb-data.npy")
+            self.lb_targets = np.load(data_folder + "/lb-targets.npy")
+            self.lb_cls_counts = self._node_cls_count(self.lb_targets)
+            print(f"Node {self.node_indx} labeled class distribution:{self.lb_cls_counts}")
         else:
-            self.data = np.load(data_folder + "/test-data.npy")
-            self.targets = np.load(data_folder + "/test-labels.npy")
-        
-        self.cls_counts = self._node_cls_count()
-        if self.train: 
-            print(f"Node {self.node_indx} train label distribution:{self.cls_counts}")
-        else:
-            print(f"Node {self.node_indx} test label distribution:{self.cls_counts}")
-        
+            self.test_data = np.load(data_folder + "/test-data.npy")
+            self.test_targets = np.load(data_folder + "/test-targets.npy")
+            self.test_cls_counts = self._node_cls_count(self.test_targets)
+            print(f"Node {self.node_indx} test label distribution:{self.test_cls_counts}")
 
     def _look_for_data(self):
         data_folder = None
@@ -220,9 +234,9 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
 
         return node_dataidx_map
     
-    def _node_cls_count(self):
+    def _node_cls_count(self, targets):
         # count the number of data points in each classes for each node
-        unq, unq_cnt = np.unique(self.targets, return_counts=True)
+        unq, unq_cnt = np.unique(targets, return_counts=True)
         cls_count = {unq[i]: unq_cnt[i] for i in range(len(unq))}
             
         return cls_count

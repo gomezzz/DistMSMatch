@@ -86,12 +86,12 @@ class SSL_Dataset:
         if self.name == "eurosat_ms":
             self.use_ms_augmentations = True
 
-    def get_data(self):
+    def get_data(self, num_labels):
         """
         get_data returns data (images) and targets (labels)
         """
         if self.name == "eurosat_rgb":
-            dset = EurosatRGBDataset(train=self.train, seed=self.seed, alpha=self.alpha, nodes = self.nodes, node_indx=self.node_indx)
+            dset = EurosatRGBDataset(train=self.train, seed=self.seed, num_labels=num_labels, alpha=self.alpha, nodes = self.nodes, node_indx=self.node_indx)
         # elif self.name == "eurosat_ms":
         #     dset = EurosatDataset(train=self.train, seed=self.seed)
         else:
@@ -100,9 +100,27 @@ class SSL_Dataset:
         self.label_encoding = dset.label_encoding
         self.num_classes = dset.num_classes
         self.num_channels = dset.num_channels
+        
+        lb_data, lb_targets = dset.lb_data, dset.lb_targets
+        ulb_data, ulb_targets = dset.ul_data, dset.ul_targets
+        return lb_data, lb_targets, ulb_data, ulb_targets
+    
+    def get_test_data(self):
+        """
+        get_data returns data (images) and targets (labels)
+        """
+        if self.name == "eurosat_rgb":
+            dset = EurosatRGBDataset(train=False, node_indx=self.node_indx)
+        # elif self.name == "eurosat_ms":
+        #     dset = EurosatDataset(train=self.train, seed=self.seed)
+        else:
+            raise NotImplementedError("Dataset {} is not available".format(self.name))
 
-        data, targets = dset.data, dset.targets
-        return data, targets
+        self.label_encoding = dset.label_encoding
+        self.num_classes = dset.num_classes
+        self.num_channels = dset.num_channels
+        
+        return dset.test_data, dset.test_targets
 
     def get_dset(self, use_strong_transform=False, strong_transform=None, onehot=False):
         """
@@ -114,7 +132,7 @@ class SSL_Dataset:
             onehot: If True, the label is not integer, but one-hot vector.
         """
 
-        data, targets = self.get_data()
+        data, targets = self.get_test_data()
 
         return BasicDataset(
             data,
@@ -130,8 +148,6 @@ class SSL_Dataset:
     def get_ssl_dset(
         self,
         num_labels,
-        index=None,
-        include_lb_to_ulb=True,
         use_strong_transform=True,
         strong_transform=None,
         onehot=False,
@@ -153,11 +169,7 @@ class SSL_Dataset:
             BasicDataset (for labeled data), BasicDataset (for unlabeld data)
         """
 
-        data, targets = self.get_data()
-
-        lb_data, lb_targets, ulb_data, ulb_targets = split_ssl_data(
-            data, targets, num_labels, self.num_classes, index, include_lb_to_ulb
-        )
+        lb_data, lb_targets, ulb_data, ulb_targets = self.get_data(num_labels)
 
         lb_dset = BasicDataset(
             lb_data,
@@ -171,8 +183,8 @@ class SSL_Dataset:
         )
 
         ulb_dset = BasicDataset(
-            data,
-            targets,
+            ulb_data,
+            ulb_targets,
             self.num_classes,
             self.transform,
             use_strong_transform,

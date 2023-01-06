@@ -67,6 +67,21 @@ async def main_loop(nodes: list[mm.BaseNode], cfg, logger):
     
 
 if __name__ == '__main__':
+    
+    # import matplotlib.pyplot as plt
+    # acc = np.zeros((16,100))
+    # for node in range(16):
+    #     path = f"./results/node {node}.npy"
+    #     acc[node,:] = np.load(path)
+    #     plt.plot(range(acc.shape[1]), acc[node,:], label=f"sat{node}")
+    
+    # plt.legend()
+    # plt.xlabel("Training round")
+    # plt.ylabel("Test accuracy")
+    # plt.title("Walker (16 sats, 4 planes, 30 deg incl), 100 iterations/round")
+    # plt.grid()
+    
+    
     cfg_path=None
     # We use a cfg DotMap (a dictionary with dot accessors) to store the configuration for the run
     cfg=mm.load_cfg(cfg_path)
