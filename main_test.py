@@ -29,19 +29,21 @@ async def main_loop(nodes: list[mm.BaseNode], cfg, logger):
         nodes_exl_self = list(set(nodes) - set([node]))
         node.add_actors(nodes_exl_self)
     
-    
+    updated = np.ones((len(nodes)))
     for r in range(cfg.training_rounds):
         logger.info(f"Training round {r}")
         # Train models locally
         local_models = {}
-        for node in nodes:
-            node.paseos.perform_activity("Train", [cfg])
+        for i, node in enumerate(nodes):
+            if updated[i]:
+                node.paseos.perform_activity("Train", [cfg])
             await node.wait_for_activity()
             local_models[node.name] = node.model.train_model
         
         sync_nodes(nodes)
         
         # Aggregate models between neighbors
+        updated = np.zeros((len(nodes)))
         for i, node in enumerate(nodes):
             tx_rate_bps = 1000 * node.paseos.local_actor.communication_devices['link'].bandwidth_in_kbps
             tx_duration = num_kb_to_tx / tx_rate_bps
@@ -59,27 +61,29 @@ async def main_loop(nodes: list[mm.BaseNode], cfg, logger):
             if len(neighbor_models)>0:
                 node.aggregate(neighbor_models)
                 node.advance_time(tx_duration)
+                updated[i] = True 
             logger.info(f"Node {node.node_indx} merged with {neighbors}")
+            node.save_history()
         sync_nodes(nodes)
+        
     
-    for node in nodes:
-        node.save_history()
+        
     
 
 if __name__ == '__main__':
     
-    # import matplotlib.pyplot as plt
-    # acc = np.zeros((16,100))
-    # for node in range(16):
-    #     path = f"./results/node {node}.npy"
-    #     acc[node,:] = np.load(path)
-    #     plt.plot(range(acc.shape[1]), acc[node,:], label=f"sat{node}")
+    import matplotlib.pyplot as plt
+    acc = np.zeros((16,100))
+    for node in range(16):
+        path = f"./results/node {node}.npy"
+        acc[node,:] = np.load(path)[:100]
+        plt.plot(range(acc.shape[1]), acc[node,:], label=f"sat{node}")
     
-    # plt.legend()
-    # plt.xlabel("Training round")
-    # plt.ylabel("Test accuracy")
-    # plt.title("Walker (16 sats, 4 planes, 30 deg incl), 100 iterations/round")
-    # plt.grid()
+    plt.legend()
+    plt.xlabel("Training round")
+    plt.ylabel("Test accuracy")
+    plt.title("Walker (16 sats, 4 planes, 30 deg incl), 100 iterations/round")
+    plt.grid()
     
     
     cfg_path=None

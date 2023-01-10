@@ -173,7 +173,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
                         if config_exists:
                             f = open(data_config_path)
                             data_config = json.load(f)
-                            if data_config['test_ratio'] == self.test_ratio and data_config['seed'] == self.seed:
+                            if data_config['test_ratio'] == self.test_ratio and data_config['seed'] == self.seed and data_config['num_labels'] == self.num_labels:
                                 self.label_encoding = data_config['label_encoding']
                                 self.data_exist = True
                                 data_folder = cur_folder

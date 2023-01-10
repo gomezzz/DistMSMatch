@@ -25,7 +25,7 @@ def get_default_cfg():
     cfg.opt = "SGD"
     cfg.pretrained = False
     cfg.save_dir = "./results/"
-    cfg.ema_m = 0.999
+    cfg.ema_m = 0.99
     cfg.bn_momentum = 1.0 - cfg.ema_m
     cfg.eval_batch_size = 1024
     cfg.momentum = 0.9
@@ -33,7 +33,7 @@ def get_default_cfg():
     cfg.amp = False
     cfg.hard_label = True
     cfg.multiprocessing_distributed = False
-    cfg.num_eval_iter = 200 # iterations in an epoch
+    cfg.num_eval_iter = 100 # iterations in an epoch
     cfg.local_epochs = 1
     cfg.scale = 1
     cfg.training_rounds = 100
