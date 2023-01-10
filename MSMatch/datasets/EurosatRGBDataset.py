@@ -116,6 +116,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
             data_config.label_encoding = self.label_encoding
             data_config.seed = self.seed
             data_config.datashape = images.shape
+            data_config.num_labels = self.num_labels
             with open(data_folder + "/data_config.json", "w+") as f:
                 json.dump(data_config, f)
             

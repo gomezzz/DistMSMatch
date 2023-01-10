@@ -21,7 +21,7 @@ def get_default_cfg():
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
     cfg.seed = 42
-    cfg.num_labels = 100
+    cfg.num_labels = 1000
     cfg.opt = "SGD"
     cfg.pretrained = False
     cfg.save_dir = "./results/"
