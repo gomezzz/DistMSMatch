@@ -21,10 +21,15 @@ def bytestream_to_statedict(bytestream_parameters, model_template):
     # go over each layer
     for i, val in model_template.state_dict().items():
         layer_shape = tuple(val.size())  # get size of current layer
-        elems = np.prod(layer_shape)  # find number of elements in layer
-        layer_params = np.reshape(
-            raw_parameters[range(elems)], layer_shape
-        )  # make an ndarray the shape of the layer
+        # TODO: understand why there are empty layers in efficientnet
+        if len(layer_shape) > 0:
+            elems = np.prod(layer_shape)  # find number of elements in layer
+            layer_params = np.reshape(
+                raw_parameters[range(elems)], layer_shape
+            )  # make an ndarray the shape of the layer
+        else:
+            elems = 1
+            layer_params = np.zeros(1)
         parameters.append(layer_params)  # add the ndarray to a list
         raw_parameters = np.delete(raw_parameters, range(elems))  # delete the used parameters
 

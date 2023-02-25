@@ -8,89 +8,66 @@ import MSMatch as mm
 import numpy as np
 import pykep as pk
 from loguru import logger
-
-def sync_nodes(nodes:list[mm.BaseNode]):
-    t_n = [node.local_time() for node in nodes] # get local time for each node
-    extra_time = [np.max(t_n) - t for t in t_n] # find out how much each node must proceed to sync
-    for i in range(len(nodes)):
-        nodes[i].advance_time(extra_time[i])
-        
-    # all nodes must step in time before we update connections for the nodes    
-    for node in nodes:
-        node.update_los_connections()
+from mpi4py import MPI
 
 
-async def main_loop(nodes: list[mm.BaseNode], cfg, logger):
+async def main_loop(node, cfg, comm, other_ranks, logger):
     
-    num_kb_to_tx = len(mm.model_to_bytestream(nodes[0].model.train_model))*8
-    
-    # Make sure nodes are aware of each other
-    for node in nodes:
-        nodes_exl_self = list(set(nodes) - set([node]))
-        node.add_actors(nodes_exl_self)
-    
-    updated = np.ones((len(nodes)))
-    for r in range(cfg.training_rounds):
-        logger.info(f"Training round {r}")
-        # Train models locally
-        local_models = {}
-        for i, node in enumerate(nodes):
-            if updated[i]:
-                node.paseos.perform_activity("Train", [cfg])
-            await node.wait_for_activity()
-            local_models[node.name] = node.model.train_model
+    simulation_time = 24.0 * 3600  # simulation interval in seconds
+    t = 0 # starting time in seconds
+    timestep = 1800  # how often we synchronize actors' trajectories
+    comm.Barrier()
+    while t <= simulation_time:
         
-        sync_nodes(nodes)
+        if node.do_training:      
+            node.paseos.perform_activity("Train", [cfg])
+            await node.paseos.wait_for_activity()      
+            node.do_training = False 
         
-        # Aggregate models between neighbors
-        updated = np.zeros((len(nodes)))
-        for i, node in enumerate(nodes):
-            tx_rate_bps = 1000 * node.paseos.local_actor.communication_devices['link'].bandwidth_in_kbps
-            tx_duration = num_kb_to_tx / tx_rate_bps
-            
-            nodes_exl_self = list(set(nodes) - set([node]))
-            connected_nodes = node.get_los_connections()
-            
-            neighbor_models = []
-            neighbors = []
-            for n in nodes_exl_self:
-                if (n.name in connected_nodes) and connected_nodes[n.name]: # there is a line-of-sight
-                    if node.is_tx_feasible(n, tx_duration):
-                        neighbor_models.append(local_models[n.name])
-                        neighbors.append(n.name)
-            if len(neighbor_models)>0:
-                node.aggregate(neighbor_models)
-                node.advance_time(tx_duration)
-                updated[i] = True 
-            logger.info(f"Node {node.node_indx} merged with {neighbors}")
-            node.save_history()
-        sync_nodes(nodes)
+        comm.Barrier()
+        node.exchange_actors(comm, other_ranks, verbose=True)
+        node.exchange_models_and_aggregate(comm, verbose=False)
+        comm.Barrier()
         
-    
+        node.advance_time(timestep)
+        t += timestep
         
-    
-
+        if node.rank == 0: 
+            logger.info(f"-----------------------------------")
+        
+        
 if __name__ == '__main__':
     
-    import matplotlib.pyplot as plt
-    acc = np.zeros((16,100))
-    for node in range(16):
-        path = f"./results/node {node}.npy"
-        acc[node,:] = np.load(path)[:100]
-        plt.plot(range(acc.shape[1]), acc[node,:], label=f"sat{node}")
+    # import matplotlib.pyplot as plt
+    # acc = np.zeros((16,100))
+    # for node in range(16):
+    #     path = f"./results/node {node}.npy"
+    #     acc[node,:] = np.load(path)[:100]
+    #     plt.plot(range(acc.shape[1]), acc[node,:], label=f"sat{node}")
     
-    plt.legend()
-    plt.xlabel("Training round")
-    plt.ylabel("Test accuracy")
-    plt.title("Walker (16 sats, 4 planes, 30 deg incl), 100 iterations/round")
-    plt.grid()
-    
+    # plt.legend()
+    # plt.xlabel("Training round")
+    # plt.ylabel("Test accuracy")
+    # plt.title("Walker (16 sats, 4 planes, 30 deg incl), 100 iterations/round")
+    # plt.grid()
     
     cfg_path=None
     # We use a cfg DotMap (a dictionary with dot accessors) to store the configuration for the run
     cfg=mm.load_cfg(cfg_path)
     if torch.cuda.is_available():
         cfg.gpu = 0
+        
+    # Get MPI object
+    comm = MPI.COMM_WORLD
+    size = comm.Get_size()
+    
+    assert (size == cfg.nodes), "number of satellites should equal number of processes"
+    
+    rank = comm.Get_rank()
+    other_ranks = [x for x in range(size) if x != rank]
+    print(f"Started rank {rank}, other ranks are {other_ranks}")
+    
+
 
     # Set seeds for reproducibility and enable loggers
     logger.remove()
@@ -107,7 +84,7 @@ if __name__ == '__main__':
     node_dls, cfg = mm.create_node_dataloaders(cfg)
     
     # get constellations params
-    altitude = 400 * 1000 # Constellation attitude above the Earth's ground
+    altitude = 600 * 1000 # Constellation attitude above the Earth's ground
     inclination = 30.0 # inclination of each orbital plane
     nPlanes = cfg.planes # the number of orbital planes (see linked wiki article)
     nSats = cfg.nodes // nPlanes # the number of satellites per orbital plane
@@ -116,15 +93,9 @@ if __name__ == '__main__':
     # Compute orbits of LEO satellites
     planet_list,sats_pos_and_v = mm.get_constellation(altitude,inclination,nSats,nPlanes,t0)
 
-    # Create nodes
-    nodes = []
-    for i in range(cfg.nodes):
-        node = mm.PaseosNode(i, sats_pos_and_v[i],
-            cfg,
-            node_dls[i],
-            logger)
-        nodes.append(node)
+    # Create node
+    node = mm.PaseosNode(rank, sats_pos_and_v[rank], cfg, node_dls[rank], logger)
 
     # do training
-    asyncio.run(main_loop(nodes, cfg, logger))
+    asyncio.run(main_loop(node, cfg, comm, other_ranks, logger))
     

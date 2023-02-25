@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 import os
-from tqdm import tqdm
+import sys
 from pathlib import Path
 
 from ...utils.consistency_loss import consistency_loss
@@ -25,6 +25,8 @@ class FixMatch:
         num_eval_iter=1000,
         tb_log=None,
         logger=None,
+        device = "cpu",
+        rank = None
     ):
         """
         class Fixmatch contains setter of data_loader, optimizer, and model update methods.
@@ -58,6 +60,8 @@ class FixMatch:
         self.lambda_u = lambda_u
         self.tb_log = tb_log
         self.use_hard_label = hard_label
+        self.device = device
+        self.rank=rank
 
         self.optimizer = None
         self.scheduler = None
@@ -106,28 +110,23 @@ class FixMatch:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-    def train(self, cfg, progressbar=None):
+    def train(self, cfg):
         """
         Train function of FixMatch.
         From data_loader, it inference training data, computes losses, and update the networks.
         """
-        ngpus_per_node = torch.cuda.device_count()
-
         # lb: labeled, ulb: unlabeled
+        
         self.train_model.train()
-
-        total_local_epochs = (cfg.num_train_iter // cfg.num_eval_iter)-1
+        self.train_model.to(self.device)
+        self.eval_model.to(self.device)
         
         self.it = 1
         curr_epoch = 0
-        progressbar = tqdm(
-            desc=f"epoch {curr_epoch}/{total_local_epochs}", total=cfg.num_eval_iter
-        )
-        
         best_eval_acc, best_it = 0.0, 0
 
         lb_iterator = iter(self.loader_dict["train_lb"]) # iterator for labeled data
-        
+
         for (x_ulb_w, x_ulb_s, _) in self.loader_dict["train_ulb"]:
             
             # prevent the training iterations exceed cfg.num_train_iter
@@ -143,19 +142,18 @@ class FixMatch:
             
             self.train_model.zero_grad()
 
-            
-
             num_lb = x_lb.shape[0]
             num_ulb = x_ulb_w.shape[0]
             assert num_ulb == x_ulb_s.shape[0]
 
+            # Move data to gpu
             if torch.cuda.is_available():
                 x_lb, x_ulb_w, x_ulb_s = (
-                    x_lb.cuda(cfg.gpu),
-                    x_ulb_w.cuda(cfg.gpu),
-                    x_ulb_s.cuda(cfg.gpu),
+                    x_lb.to(self.device),
+                    x_ulb_w.to(self.device),
+                    x_ulb_s.to(self.device),
                 )
-                y_lb = y_lb.cuda(cfg.gpu)
+                y_lb = y_lb.to(self.device)
 
             inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s))
 
@@ -196,12 +194,10 @@ class FixMatch:
             tb_dict["train/mask_ratio"] = 1.0 - mask.detach()
             tb_dict["lr"] = self.optimizer.param_groups[0]["lr"]
             tb_dict["train/top-1-acc"] = train_accuracy
-
-            progressbar.set_postfix_str(f"Total Loss={total_loss.detach():.3e}")
-            progressbar.update(1)
+            
+            print(f"Rank {self.rank}, iteration {self.it}/{cfg.num_train_iter}", end = "\r", flush = True)
 
             if self.it % self.num_eval_iter == 0 and self.it > 0:
-                progressbar.close()
                 curr_epoch += 1
 
                 eval_dict = self.evaluate(cfg=cfg)
@@ -211,20 +207,8 @@ class FixMatch:
                     best_eval_acc = tb_dict["eval/top-1-acc"]
                     best_it = self.it
 
-                # self.print_fn(
-                #     f"{self.it} iteration, USE_EMA: {hasattr(self, 'eval_model')}, {tb_dict}, BEST_EVAL_ACC: {best_eval_acc}, at {best_it} iters"
-                # )
-                if self.it < cfg.num_train_iter:
-                    progressbar = tqdm(
-                        desc=f"epoch {curr_epoch}/{total_local_epochs}", total=cfg.num_eval_iter
-                    )
-
-            # if not cfg.multiprocessing_distributed or (
-            #     cfg.multiprocessing_distributed and cfg.rank % ngpus_per_node == 0
-            # ):
-
-            #     if self.it == best_it:
-            #         self.save_run("model_best.pth", cfg.save_path, cfg=None)
+                # if self.it == best_it:
+                #     run("model_best.pth", cfg.save_path, cfg=None)
 
             #     if not self.tb_log is None:
             #         self.tb_log.update(tb_dict, self.it)
@@ -236,6 +220,11 @@ class FixMatch:
 
         eval_dict = self.evaluate(cfg=cfg)
         eval_dict.update({"eval/best_acc": best_eval_acc, "eval/best_it": best_it})
+        
+        # move models away from GPU to free up space
+        self.train_model.to("cpu")
+        self.eval_model.to("cpu")
+                
         return eval_dict
 
     @torch.no_grad()
@@ -244,6 +233,7 @@ class FixMatch:
         use_ema = hasattr(self, "eval_model")
         
         eval_model = self.eval_model if use_ema else self.train_model
+        eval_model.to(self.device)
         eval_model.eval()
         if eval_loader is None:
             eval_loader = self.loader_dict["eval"]
@@ -253,7 +243,7 @@ class FixMatch:
         total_num = 0.0
         for x, y in eval_loader:
             if torch.cuda.is_available():
-                x, y = x.cuda(cfg.gpu), y.cuda(cfg.gpu)
+                x, y = x.to(self.device), y.to(self.device)
             num_batch = x.shape[0]
             total_num += num_batch
             logits = eval_model(x)
@@ -265,7 +255,7 @@ class FixMatch:
 
         if not use_ema:
             eval_model.train()
-
+        
         return {
             "eval/loss": total_loss / total_num,
             "eval/top-1-acc": total_acc / total_num,
