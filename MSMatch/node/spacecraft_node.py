@@ -85,6 +85,8 @@ class SpaceCraftNode(BaseNode):
         model_size_kb = self._get_model_size_bytes() * 8 / 1e3
         self.comm_duration = model_size_kb / self.local_actor.communication_devices['link'].bandwidth_in_kbps
         print(f'Comm duration: {self.comm_duration} s', flush=True)
+        
+        self.update_time = 200
 
     def _get_model_size_bytes(self):
         param_size = 0
@@ -113,6 +115,7 @@ class SpaceCraftNode(BaseNode):
         r, v = self.local_actor.get_position_velocity(self.local_actor.local_time)
         data.append(r)
         data.append(v)
+        data.append(self.local_actor.current_activity)
         return data
     
     def _parse_actor_data(self, actor_data):
@@ -134,6 +137,7 @@ class SpaceCraftNode(BaseNode):
             epoch=actor_data[1],
             central_body=self.earth,
         )
+        actor._current_activity = actor_data[4]
         return actor
     
     def exchange_actors(self, verbose=False):
@@ -169,12 +173,16 @@ class SpaceCraftNode(BaseNode):
         )
         
         self.ranks_in_lineofsight = []
-        t_now = self.local_actor.local_time.mjd2000
-        t_after_comm = t_now + + self.comm_duration * pk.SEC2DAY
+        self.other_actors_training = []
+        window_start = self.local_actor.local_time
+        window_end = pk.epoch(self.local_actor.local_time.mjd2000 + self.comm_duration * pk.SEC2DAY)
         for i, recv_request in enumerate(recv_requests):
             other_actor_data = recv_request.wait()
             other_actor = self._parse_actor_data(other_actor_data)
-            if self.local_actor.is_in_line_of_sight(other_actor, t_now) and self.local_actor.is_in_line_of_sight(other_actor, t_after_comm):
+            is_training = other_actor.current_activity == "Training"
+            self.other_actors_training.append(is_training)
+            
+            if self.local_actor.is_in_line_of_sight(other_actor, epoch=window_start) and self.local_actor.is_in_line_of_sight(other_actor, epoch=window_end):
                 self.paseos.add_known_actor(other_actor)
                 self.ranks_in_lineofsight.append(self.other_ranks[i])
 
@@ -192,7 +200,9 @@ class SpaceCraftNode(BaseNode):
         # Wait for ranks ahead to announce they are done
         recv_requests = []
         for i in self.ranks_with_same_gpu:
-            if i < self.rank:
+            if i < self.rank and self.other_actors_training[i] == True:
+                if self.rank == 7:
+                    print(f"Waiting for node{i}", flush=True)
                 recv_requests.append(self.comm.irecv(source=i, tag=int(str(i) + str(self.rank))))
                 
         for recv_request in recv_requests:
@@ -226,25 +236,27 @@ class SpaceCraftNode(BaseNode):
             activity,power_consumption
         """
         if (
-            time_since_last_update > 900
+            time_since_last_update > self.update_time
             and len(self.paseos.known_actors) > 0
             and self.local_actor.state_of_charge > 0.1
             and self.local_actor.temperature_in_K < 273.15 + 45
         ):
+            self.local_actor._current_activity = "Model_update"
             return "Model_update", 10, 0
         elif (
             self.local_actor.temperature_in_K > (273.15 + 40)
             or self.local_actor.state_of_charge < 0.2
             or (time_in_standby > 0 and time_in_standby < standby_period)
         ):
+            self.local_actor._current_activity = "Standby"
             return "Standby", 5, time_in_standby + timestep
         else:
             # Wattage from 1605B https://www.amd.com/en/products/embedded-ryzen-v1000-series
             # https://unibap.com/wp-content/uploads/2021/06/spacecloud-ix5-100-product-overview_v23.pdf
+            self.local_actor._current_activity = "Training"
             return "Training", 30, 0
     
     def perform_activity(self, activity, power_consumption, time_to_run):
-        self.local_actor._current_activity = activity
         return_code = self.paseos.advance_time(
             time_to_run,
             current_power_consumption_in_W=power_consumption,
@@ -255,13 +267,14 @@ class SpaceCraftNode(BaseNode):
     
     def train_one_batch(self):
         # wait for nodes ahead in queue to use GPU
-     #   self.queue_for_gpu()
-        # Train the moedl
-        self.model.train_one_batch(self.cfg)
+        self.queue_for_gpu()
+        # Train the model
+        train_acc = self.model.train_one_batch(self.cfg)
         # Announce that gpu is released
-     #   self.step_out_of_queue_for_gpu()
+        self.step_out_of_queue_for_gpu()
+        
+        return train_acc.numpy()
 
-    
     def evaluate(self):
         loss, acc = self.model.evaluate()
         return loss, acc

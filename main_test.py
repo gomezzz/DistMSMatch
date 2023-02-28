@@ -8,7 +8,9 @@ import pykep as pk
 from loguru import logger
 from mpi4py import MPI
 import paseos
+import os
 import time
+
 
 
 def main_loop():
@@ -45,6 +47,9 @@ def main_loop():
     planet_list,sats_pos_and_v = mm.get_constellation(altitude, inclination, nSats, nPlanes, t0)
 
     # Create node
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    cfg.sim_path = cfg.save_dir + f"ISL/{timestr}"
+    cfg.save_path = cfg.sim_path + f"/node{rank}"
     node = mm.SpaceCraftNode(sats_pos_and_v[rank], cfg, node_dls[rank], comm, logger)
 
     # Ground stations
@@ -59,33 +64,30 @@ def main_loop():
     #------------------------------------
     time_in_standby = 0
     time_since_last_update = 0
-    time_per_batch = 0.3
+    time_per_batch = 5.0
     time_for_comms = node.comm_duration
     standby_period = 900  # how long to standby if necessary
-    model_update_countdown = 0
+    model_update_countdown = -1
     test_losses = []
     test_accuracy = []
+    train_accuracy = []
+    local_time_at_train = []
     local_time_at_test = []
     communication_times = []
     communication_over_times = []
     
-    total_batches = 50 # total number of training rounds
+    total_batches = 1000 # total number of training rounds
     batch_idx = 0 # starting round
     sim_time = 0
     paseos.set_log_level("INFO")
     while batch_idx <= total_batches:
-        sim_time += time_per_batch
-        if batch_idx % 10 == 0:
-            print(
-                f"Rank {rank} - Temperature[C]: "
-                + f"{node.local_actor.temperature_in_K - 273.15:.2f},"
-                + f"Battery SoC: {node.local_actor.state_of_charge:.2f}", flush=True
-            )
-        
+        sim_time = node.paseos._state.time
+        # if node.rank == 0:
+        #     print(f"Time: {sim_time}", flush=True)
         
         if model_update_countdown > 0:
             # if we have shared models, we make sure to do the 
-            activity = "Model"
+            activity = "Model_update"
             power_consumption = 10
         else:    
             # Find out what kind of activity to perform
@@ -95,31 +97,31 @@ def main_loop():
                 standby_period,
                 time_since_last_update,
             )
-        
+            
+            comm.Barrier() # sync all models in time
+            node.exchange_actors(verbose=False)  # Find out what actors can be seen and what the other actors are doing
         # run the current activity (Model update, training, or standby)
         if activity == "Model_update":
-            if model_update_countdown == 0:
+            if model_update_countdown == -1:
                 print(
-                    f"Node{rank} will update with {node.paseos.known_actor_names()} at {node.local_actor.local_time}"
+                    f"Node{rank} will update with {node.paseos.known_actor_names} at {sim_time}", flush=True
                 )
                 
                 # sync on actor positions and update on line-of-sights
-                node.exchange_actors() 
                 node.aggregate()
                 communication_times.append(sim_time)
-                
-                loss, acc = node.evaluate()
-                test_losses.append(loss)
-                test_accuracy.append(acc)
-                local_time_at_test.append(node.local_actor.local_time)
-                node.logger.info(f"Rank {node.rank}, post aggregation: eval acc: {acc}")
                 
                 time_since_last_update = 0
                 model_update_countdown = time_for_comms // time_per_batch
             else:
-                model_update_countdown = np.maximum(0, model_update_countdown-1)
-                if model_update_countdown == 0:
+                model_update_countdown -= 1
+                if model_update_countdown < 0:
                     communication_over_times.append(sim_time)
+                    loss, acc = node.evaluate()
+                    test_losses.append(loss)
+                    test_accuracy.append(acc)
+                    local_time_at_test.append(sim_time)
+                    print(f"Rank {node.rank}, post aggregation: eval acc: {acc}", flush=True)
             
             # increase time for communication
             node.perform_activity(activity, power_consumption, time_per_batch)
@@ -130,31 +132,36 @@ def main_loop():
             time_since_last_update += time_per_batch
             
             # perform training for one iteration only
-            node.train_one_batch()
+            train_acc = node.train_one_batch()
+            train_accuracy.append(train_acc)
+            local_time_at_train.append(sim_time)
             batch_idx += 1
             
-            if batch_idx % 10 == 0:
+            if batch_idx % 25 == 0:
                 loss, acc = node.evaluate()
                 test_losses.append(loss)
                 test_accuracy.append(acc)
                 local_time_at_test.append(sim_time)
-                node.logger.info(f"Rank {node.rank}, batch_idx {batch_idx}: eval acc: {acc}")
+                print(f"Simulation time: {sim_time} "
+                    + f"Rank {node.rank}, batch_idx {batch_idx}: eval acc: {acc} "
+                    + f"Temp: {node.local_actor.temperature_in_K - 273.15:.2f} "
+                    + f"Battery SoC: {node.local_actor.state_of_charge:.2f}", flush=True)
+            
                 
                 node.save_model() # save model to folder
         else:
             # Standby
             node.perform_activity(activity, power_consumption, time_per_batch)
         
-        comm.Barrier() # sync all models in time
-    
     # Save things to become a happy camper
-    node.paseos.save_status_log_csv(f"{cfg.save_dir}/paseos_rank{rank}.csv")
-    np.savetxt(f"{cfg.save_dir}/loss_rank{rank}.csv", np.array(test_losses), delimiter=",")
-    np.savetxt(f"{cfg.save_dir}/acc_rank{rank}.csv", np.array(test_accuracy), delimiter=",")
-    np.savetxt(f"{cfg.save_dir}/test_time_rank{rank}.csv", np.array(local_time_at_test), delimiter=",")
-    np.savetxt(f"{cfg.save_dir}/comm_time_rank{rank}.csv", np.array(communication_times), delimiter=",")
-    np.savetxt(f"{cfg.save_dir}/post_comm_time_rank{rank}.csv", np.array(communication_over_times), delimiter=",")
-
+    np.savetxt(f"{cfg.save_path}/test_loss.csv", np.array(test_losses), delimiter=",")
+    np.savetxt(f"{cfg.save_path}/test_acc.csv", np.array(test_accuracy), delimiter=",")
+    np.savetxt(f"{cfg.save_path}/test_time.csv", np.array(local_time_at_test), delimiter=",")
+    np.savetxt(f"{cfg.save_path}/train_acc.csv", np.array(train_accuracy), delimiter=",")
+    np.savetxt(f"{cfg.save_path}/train_time.csv", np.array(local_time_at_train), delimiter=",")
+    np.savetxt(f"{cfg.save_path}/comm_time.csv", np.array(communication_times), delimiter=",")
+    np.savetxt(f"{cfg.save_path}/post_comm_time.csv", np.array(communication_over_times), delimiter=",")
+    node.paseos.save_status_log_csv(f"{cfg.save_path}/paseos_data.csv")
         
 if __name__ == '__main__':
     main_loop()

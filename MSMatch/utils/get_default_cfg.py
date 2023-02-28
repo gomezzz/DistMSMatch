@@ -17,14 +17,14 @@ def get_default_cfg():
     cfg.batch_size = 64
     cfg.p_cutoff = 0.95
     cfg.lr = 0.03
-    cfg.uratio = 5
+    cfg.uratio = 4
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
     cfg.seed = 42
     cfg.num_labels = 1000
     cfg.opt = "SGD"
     cfg.pretrained = False
-    cfg.save_dir = "./results/ISL"
+    cfg.save_dir = "./results/"
     cfg.ema_m = 0.99
     cfg.eval_batch_size = 512
     cfg.momentum = 0.9

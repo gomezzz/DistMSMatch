@@ -174,13 +174,20 @@ class FixMatch:
         # Update the evaluation model from training model
         with torch.no_grad():
             self._eval_model_update()
-            # train_accuracy = accuracy(logits_x_lb, y_lb)
-            # train_accuracy = train_accuracy[0]
+            train_accuracy = accuracy(logits_x_lb, y_lb)
+            train_accuracy = train_accuracy[0]
 
         # move models away from GPU to free up space
         self.train_model.cpu()
         self.eval_model.cpu()
+        
+        x_lb, x_ulb_w, x_ulb_s = (
+                x_lb.cpu(),
+                x_ulb_w.cpu(),
+                x_ulb_s.cpu(),
+            )
 
+        return train_accuracy.cpu()
 
 
     @torch.no_grad()
