@@ -62,7 +62,16 @@ class SSL_Dataset:
     and return BasicDataset: torch.utils.data.Dataset (see datasets.dataset.py)
     """
 
-    def __init__(self, name="eurosat_rgb", train=True, data_dir="./data", seed=42, alpha=1.0, nodes = 1, node_indx = 1):
+    def __init__(
+        self,
+        name="eurosat_rgb",
+        train=True,
+        data_dir="./data",
+        seed=42,
+        alpha=1.0,
+        nodes=1,
+        node_indx=1,
+    ):
         """
         Args
             name: name of dataset
@@ -91,7 +100,14 @@ class SSL_Dataset:
         get_data returns data (images) and targets (labels)
         """
         if self.name == "eurosat_rgb":
-            dset = EurosatRGBDataset(train=self.train, seed=self.seed, num_labels=num_labels, alpha=self.alpha, nodes = self.nodes, node_indx=self.node_indx)
+            dset = EurosatRGBDataset(
+                train=self.train,
+                seed=self.seed,
+                num_labels=num_labels,
+                alpha=self.alpha,
+                nodes=self.nodes,
+                node_indx=self.node_indx,
+            )
         # elif self.name == "eurosat_ms":
         #     dset = EurosatDataset(train=self.train, seed=self.seed)
         else:
@@ -100,11 +116,11 @@ class SSL_Dataset:
         self.label_encoding = dset.label_encoding
         self.num_classes = dset.num_classes
         self.num_channels = dset.num_channels
-        
+
         lb_data, lb_targets = dset.lb_data, dset.lb_targets
         ulb_data, ulb_targets = dset.ul_data, dset.ul_targets
         return lb_data, lb_targets, ulb_data, ulb_targets
-    
+
     def get_test_data(self):
         """
         get_data returns data (images) and targets (labels)
@@ -119,7 +135,7 @@ class SSL_Dataset:
         self.label_encoding = dset.label_encoding
         self.num_classes = dset.num_classes
         self.num_channels = dset.num_channels
-        
+
         return dset.test_data, dset.test_targets
 
     def get_dset(self, use_strong_transform=False, strong_transform=None, onehot=False):

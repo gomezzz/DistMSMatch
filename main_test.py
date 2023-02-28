@@ -2,100 +2,159 @@ import sys
 sys.path.append("..")
 
 # Main imports
-import asyncio
-import torch
 import MSMatch as mm
 import numpy as np
 import pykep as pk
 from loguru import logger
 from mpi4py import MPI
+import paseos
+import time
 
 
-async def main_loop(node, cfg, comm, other_ranks, logger):
+def main_loop():
     
-    simulation_time = 24.0 * 3600  # simulation interval in seconds
-    t = 0 # starting time in seconds
-    timestep = 1800  # how often we synchronize actors' trajectories
-    comm.Barrier()
-    while t <= simulation_time:
-        
-        if node.do_training:      
-            node.paseos.perform_activity("Train", [cfg])
-            await node.paseos.wait_for_activity()      
-            node.do_training = False 
-        
-        comm.Barrier()
-        node.exchange_actors(comm, other_ranks, verbose=True)
-        node.exchange_models_and_aggregate(comm, verbose=False)
-        comm.Barrier()
-        
-        node.advance_time(timestep)
-        t += timestep
-        
-        if node.rank == 0: 
-            logger.info(f"-----------------------------------")
-        
-        
-if __name__ == '__main__':
-    
-    # import matplotlib.pyplot as plt
-    # acc = np.zeros((16,100))
-    # for node in range(16):
-    #     path = f"./results/node {node}.npy"
-    #     acc[node,:] = np.load(path)[:100]
-    #     plt.plot(range(acc.shape[1]), acc[node,:], label=f"sat{node}")
-    
-    # plt.legend()
-    # plt.xlabel("Training round")
-    # plt.ylabel("Test accuracy")
-    # plt.title("Walker (16 sats, 4 planes, 30 deg incl), 100 iterations/round")
-    # plt.grid()
-    
+    # Load config file
     cfg_path=None
-    # We use a cfg DotMap (a dictionary with dot accessors) to store the configuration for the run
     cfg=mm.load_cfg(cfg_path)
-    if torch.cuda.is_available():
-        cfg.gpu = 0
+    mm.set_seeds(cfg.seed) # set seed
         
     # Get MPI object
     comm = MPI.COMM_WORLD
+    rank = comm.Get_rank() # get process number of current instance
     size = comm.Get_size()
     
-    assert (size == cfg.nodes), "number of satellites should equal number of processes"
+    # make sure that each satellite has a process
+#    assert (size == cfg.nodes), "number of satellites should equal number of processes"
+    print(f"Starting rank {rank}", flush=True)
     
-    rank = comm.Get_rank()
-    other_ranks = [x for x in range(size) if x != rank]
-    print(f"Started rank {rank}, other ranks are {other_ranks}")
+    # PASEOS setup
+    altitude = 786 * 1000  # altitude above the Earth's ground [m]
+    inclination = 98.62  # inclination of the orbit
+    nPlanes = cfg.planes # the number of orbital planes (see linked wiki article)
+    nSats = cfg.nodes // nPlanes # the number of satellites per orbital plane
+    t0 = pk.epoch_from_string("2023-Dec-17 14:42:42")  # starting date of our simulation
     
-
-
-    # Set seeds for reproducibility and enable loggers
-    logger.remove()
-    mm.set_seeds(cfg.seed)
-    logger_level = "INFO"
-    logger = mm.get_logger(cfg.save_path, logger_level)
-
-    # Number of training iterations per round is based on local epochs and how regularly we evaluate the model.
+    # Number of training iterations per round (number of times we sample a batch) is based on local epochs and how regularly we evaluate the model.
     # Note that batch size here only refers to the supervised part, so the real batch size
     # is cfg.batch_size * (1 + cfg.ulb_ratio)
-    cfg.num_train_iter = cfg.local_epochs * cfg.num_eval_iter * 32 // cfg.batch_size
-    
+    cfg.num_train_iter = (cfg.lb_epochs * cfg.num_labels) // cfg.batch_size
     # Create dataloaders for all nodes
     node_dls, cfg = mm.create_node_dataloaders(cfg)
     
-    # get constellations params
-    altitude = 600 * 1000 # Constellation attitude above the Earth's ground
-    inclination = 30.0 # inclination of each orbital plane
-    nPlanes = cfg.planes # the number of orbital planes (see linked wiki article)
-    nSats = cfg.nodes // nPlanes # the number of satellites per orbital plane
-    t0 = pk.epoch_from_string("2022-Oct-27 21:00:00") # the starting date of our simulation
-    
     # Compute orbits of LEO satellites
-    planet_list,sats_pos_and_v = mm.get_constellation(altitude,inclination,nSats,nPlanes,t0)
+    planet_list,sats_pos_and_v = mm.get_constellation(altitude, inclination, nSats, nPlanes, t0)
 
     # Create node
-    node = mm.PaseosNode(rank, sats_pos_and_v[rank], cfg, node_dls[rank], logger)
+    node = mm.SpaceCraftNode(sats_pos_and_v[rank], cfg, node_dls[rank], comm, logger)
 
-    # do training
-    asyncio.run(main_loop(node, cfg, comm, other_ranks, logger))
+    # Ground stations
+    stations = [
+        ["Maspalomas", 27.7629, -15.6338, 205.1],
+        ["Matera", 40.6486, 16.7046, 536.9],
+        ["Svalbard", 78.9067, 11.8883, 474.0],
+    ]
     
+    #------------------------------------
+    # Enter main loop
+    #------------------------------------
+    time_in_standby = 0
+    time_since_last_update = 0
+    time_per_batch = 0.3
+    time_for_comms = node.comm_duration
+    standby_period = 900  # how long to standby if necessary
+    model_update_countdown = 0
+    test_losses = []
+    test_accuracy = []
+    local_time_at_test = []
+    communication_times = []
+    communication_over_times = []
+    
+    total_batches = 50 # total number of training rounds
+    batch_idx = 0 # starting round
+    sim_time = 0
+    paseos.set_log_level("INFO")
+    while batch_idx <= total_batches:
+        sim_time += time_per_batch
+        if batch_idx % 10 == 0:
+            print(
+                f"Rank {rank} - Temperature[C]: "
+                + f"{node.local_actor.temperature_in_K - 273.15:.2f},"
+                + f"Battery SoC: {node.local_actor.state_of_charge:.2f}", flush=True
+            )
+        
+        
+        if model_update_countdown > 0:
+            # if we have shared models, we make sure to do the 
+            activity = "Model"
+            power_consumption = 10
+        else:    
+            # Find out what kind of activity to perform
+            activity, power_consumption, time_in_standby = node.decide_on_activity(
+                time_per_batch,
+                time_in_standby,
+                standby_period,
+                time_since_last_update,
+            )
+        
+        # run the current activity (Model update, training, or standby)
+        if activity == "Model_update":
+            if model_update_countdown == 0:
+                print(
+                    f"Node{rank} will update with {node.paseos.known_actor_names()} at {node.local_actor.local_time}"
+                )
+                
+                # sync on actor positions and update on line-of-sights
+                node.exchange_actors() 
+                node.aggregate()
+                communication_times.append(sim_time)
+                
+                loss, acc = node.evaluate()
+                test_losses.append(loss)
+                test_accuracy.append(acc)
+                local_time_at_test.append(node.local_actor.local_time)
+                node.logger.info(f"Rank {node.rank}, post aggregation: eval acc: {acc}")
+                
+                time_since_last_update = 0
+                model_update_countdown = time_for_comms // time_per_batch
+            else:
+                model_update_countdown = np.maximum(0, model_update_countdown-1)
+                if model_update_countdown == 0:
+                    communication_over_times.append(sim_time)
+            
+            # increase time for communication
+            node.perform_activity(activity, power_consumption, time_per_batch)
+        
+        elif activity == "Training":
+            # record activity in paseos
+            node.perform_activity(activity, power_consumption, time_per_batch)
+            time_since_last_update += time_per_batch
+            
+            # perform training for one iteration only
+            node.train_one_batch()
+            batch_idx += 1
+            
+            if batch_idx % 10 == 0:
+                loss, acc = node.evaluate()
+                test_losses.append(loss)
+                test_accuracy.append(acc)
+                local_time_at_test.append(sim_time)
+                node.logger.info(f"Rank {node.rank}, batch_idx {batch_idx}: eval acc: {acc}")
+                
+                node.save_model() # save model to folder
+        else:
+            # Standby
+            node.perform_activity(activity, power_consumption, time_per_batch)
+        
+        comm.Barrier() # sync all models in time
+    
+    # Save things to become a happy camper
+    node.paseos.save_status_log_csv(f"{cfg.save_dir}/paseos_rank{rank}.csv")
+    np.savetxt(f"{cfg.save_dir}/loss_rank{rank}.csv", np.array(test_losses), delimiter=",")
+    np.savetxt(f"{cfg.save_dir}/acc_rank{rank}.csv", np.array(test_accuracy), delimiter=",")
+    np.savetxt(f"{cfg.save_dir}/test_time_rank{rank}.csv", np.array(local_time_at_test), delimiter=",")
+    np.savetxt(f"{cfg.save_dir}/comm_time_rank{rank}.csv", np.array(communication_times), delimiter=",")
+    np.savetxt(f"{cfg.save_dir}/post_comm_time_rank{rank}.csv", np.array(communication_over_times), delimiter=",")
+
+        
+if __name__ == '__main__':
+    main_loop()

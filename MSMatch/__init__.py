@@ -16,8 +16,9 @@ from .datasets.SSL_Dataset import SSL_Dataset
 from .datasets.data_utils import get_data_loader
 from .datasets.create_node_dataloaders import create_node_dataloaders
 from .models.fixmatch.FixMatch import FixMatch
-from .node.node import BaseNode
-from .node.node import PaseosNode
+from .node.spacecraft_node import BaseNode
+from .node.spacecraft_node import SpaceCraftNode
+from .node.spacecraft_node import ServerNode
 from .node.get_constellation import get_constellation
 from .node.node_utils import model_to_bytestream
 
@@ -26,7 +27,8 @@ __all__ = [
     "EurosatRGBDataset",
     "FixMatch",
     "BaseNode",
-    "PaseosNode",
+    "SpaceCraftNode",
+    "ServerNode",
     "model_to_bytestream",
     "get_constellation",
     "get_cosine_schedule_with_warmup",

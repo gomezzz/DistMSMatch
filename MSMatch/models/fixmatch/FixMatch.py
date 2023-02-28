@@ -22,11 +22,10 @@ class FixMatch:
         p_cutoff,
         lambda_u,
         hard_label=True,
-        num_eval_iter=1000,
         tb_log=None,
         logger=None,
-        device = "cpu",
-        rank = None
+        device="cpu",
+        rank=None,
     ):
         """
         class Fixmatch contains setter of data_loader, optimizer, and model update methods.
@@ -40,7 +39,6 @@ class FixMatch:
             p_cutoff: confidence cutoff parameters for loss masking
             lambda_u: ratio of unsupervised loss to supervised loss
             hard_label: If True, consistency regularization use a hard pseudo label.
-            num_eval_iter: freqeuncy of iteration (after 500,000 iters)
             tb_log: tensorboard writer (see train_utils.py)
             logger: logger (see get_logger.py)
         """
@@ -54,20 +52,16 @@ class FixMatch:
         # note there is a separate eval model due to exponential moving average of the weights
         self.train_model = net_builder(num_classes=num_classes, in_channels=in_channels)
         self.eval_model = net_builder(num_classes=num_classes, in_channels=in_channels)
-        self.num_eval_iter = num_eval_iter
         self.T = T  # temperature params function
         self.p_cutoff = p_cutoff  # confidence cutoff function
         self.lambda_u = lambda_u
         self.tb_log = tb_log
         self.use_hard_label = hard_label
         self.device = device
-        self.rank=rank
+        self.rank = rank
 
         self.optimizer = None
         self.scheduler = None
-
-        self.it = 0
-
         self.logger = logger
         self.print_fn = print if logger is None else logger.info
 
@@ -78,6 +72,8 @@ class FixMatch:
             param_k.requires_grad = False  # not update by gradient for eval_net
 
         self.eval_model.eval()
+        
+        
 
     @torch.no_grad()
     def _eval_model_update(self):
@@ -105,138 +101,100 @@ class FixMatch:
     def set_data_loader(self, loader_dict):
         self.loader_dict = loader_dict
         self.print_fn(f"[!] data loader keys: {self.loader_dict.keys()}")
+        self.lb_iterator = iter(self.loader_dict["train_lb"])  # iterator for labeled data
+        self.ulb_iterator = iter(self.loader_dict["train_ulb"])
 
     def set_optimizer(self, optimizer, scheduler=None):
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-    def train(self, cfg):
+    def train_one_batch(self, cfg):
         """
         Train function of FixMatch.
         From data_loader, it inference training data, computes losses, and update the networks.
         """
-        # lb: labeled, ulb: unlabeled
-        
-        self.train_model.train()
+
         self.train_model.to(self.device)
         self.eval_model.to(self.device)
+        self.train_model.train()
+
+        # sample a batch of unlabeled data
+        try:
+            (x_ulb_w, x_ulb_s, _) = next(self.ulb_iterator)
+        except StopIteration:
+            self.ulb_iterator = iter(self.loader_dict["train_ulb"])
+            (x_ulb_w, x_ulb_s, _) = next(self.ulb_iterator)
         
-        self.it = 1
-        curr_epoch = 0
-        best_eval_acc, best_it = 0.0, 0
+        # sample a batch of labeled data
+        try:
+            (x_lb, y_lb) = next(self.lb_iterator)
+        except StopIteration:
+            self.lb_iterator = iter(self.loader_dict["train_lb"])
+            (x_lb, y_lb) = next(self.lb_iterator)
 
-        lb_iterator = iter(self.loader_dict["train_lb"]) # iterator for labeled data
+        self.train_model.zero_grad()
 
-        for (x_ulb_w, x_ulb_s, _) in self.loader_dict["train_ulb"]:
-            
-            # prevent the training iterations exceed cfg.num_train_iter
-            if self.it > cfg.num_train_iter:
-                break
+        num_lb = x_lb.shape[0]
+        num_ulb = x_ulb_w.shape[0]
+        assert num_ulb == x_ulb_s.shape[0]
 
-            # sample a batch of labeled data
-            try:
-                (x_lb, y_lb) = next(lb_iterator)
-            except StopIteration:
-                lb_iterator = iter(self.loader_dict["train_lb"]) 
-                (x_lb, y_lb) = next(lb_iterator)
-            
-            self.train_model.zero_grad()
-
-            num_lb = x_lb.shape[0]
-            num_ulb = x_ulb_w.shape[0]
-            assert num_ulb == x_ulb_s.shape[0]
-
-            # Move data to gpu
-            if torch.cuda.is_available():
-                x_lb, x_ulb_w, x_ulb_s = (
-                    x_lb.to(self.device),
-                    x_ulb_w.to(self.device),
-                    x_ulb_s.to(self.device),
-                )
-                y_lb = y_lb.to(self.device)
-
-            inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s))
-
-            # inference and calculate sup/unsup losses
-            logits = self.train_model(inputs)
-            logits_x_lb = logits[:num_lb]
-            logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
-            del logits
-
-            sup_loss = cross_entropy_loss(logits_x_lb, y_lb, reduction="mean")
-            unsup_loss, mask = consistency_loss(
-                logits_x_ulb_w,
-                logits_x_ulb_s,
-                "ce",
-                self.T,
-                self.p_cutoff,
-                use_hard_labels=cfg.hard_label,
+        # Move data to gpu
+        if torch.cuda.is_available():
+            x_lb, x_ulb_w, x_ulb_s = (
+                x_lb.to(self.device),
+                x_ulb_w.to(self.device),
+                x_ulb_s.to(self.device),
             )
+            y_lb = y_lb.to(self.device)
 
-            total_loss = sup_loss + self.lambda_u * unsup_loss
+        inputs = torch.cat((x_lb, x_ulb_w, x_ulb_s))
 
-            # parameter updates
-            total_loss.backward()
-            self.optimizer.step()
-            self.scheduler.step()
-            
+        # inference and calculate sup/unsup losses
+        logits = self.train_model(inputs)
+        logits_x_lb = logits[:num_lb]
+        logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
+        del logits, inputs
 
-            with torch.no_grad():
-                self._eval_model_update()
-                train_accuracy = accuracy(logits_x_lb, y_lb)
-                train_accuracy = train_accuracy[0]
+        sup_loss = cross_entropy_loss(logits_x_lb, y_lb, reduction="mean")
+        unsup_loss, mask = consistency_loss(
+            logits_x_ulb_w,
+            logits_x_ulb_s,
+            "ce",
+            self.T,
+            self.p_cutoff,
+            use_hard_labels=cfg.hard_label,
+        )
+        total_loss = sup_loss + self.lambda_u * unsup_loss
 
-            # tensorboard_dict update
-            tb_dict = {}
-            tb_dict["train/sup_loss"] = sup_loss.detach()
-            tb_dict["train/unsup_loss"] = unsup_loss.detach()
-            tb_dict["train/total_loss"] = total_loss.detach()
-            tb_dict["train/mask_ratio"] = 1.0 - mask.detach()
-            tb_dict["lr"] = self.optimizer.param_groups[0]["lr"]
-            tb_dict["train/top-1-acc"] = train_accuracy
-            
-            print(f"Rank {self.rank}, iteration {self.it}/{cfg.num_train_iter}", end = "\r", flush = True)
+        # parameter updates
+        total_loss.backward()
+        self.optimizer.step()
+        self.scheduler.step()
 
-            if self.it % self.num_eval_iter == 0 and self.it > 0:
-                curr_epoch += 1
+        # Update the evaluation model from training model
+        with torch.no_grad():
+            self._eval_model_update()
+            # train_accuracy = accuracy(logits_x_lb, y_lb)
+            # train_accuracy = train_accuracy[0]
 
-                eval_dict = self.evaluate(cfg=cfg)
-                tb_dict.update(eval_dict)
-
-                if tb_dict["eval/top-1-acc"] > best_eval_acc:
-                    best_eval_acc = tb_dict["eval/top-1-acc"]
-                    best_it = self.it
-
-                # if self.it == best_it:
-                #     run("model_best.pth", cfg.save_path, cfg=None)
-
-            #     if not self.tb_log is None:
-            #         self.tb_log.update(tb_dict, self.it)
-
-            self.it += 1
-            del tb_dict
-            if self.it > 2**19:
-                self.num_eval_iter = 1000
-
-        eval_dict = self.evaluate(cfg=cfg)
-        eval_dict.update({"eval/best_acc": best_eval_acc, "eval/best_it": best_it})
-        
         # move models away from GPU to free up space
-        self.train_model.to("cpu")
-        self.eval_model.to("cpu")
-                
-        return eval_dict
+        self.train_model.cpu()
+        self.eval_model.cpu()
+
+
 
     @torch.no_grad()
-    def evaluate(self, eval_loader=None, cfg=None):
-        torch.cuda.empty_cache()
+    def evaluate(self):
+        # empty cache (without entering context of current gpu, gpu0 may be initialized)
+        with torch.cuda.device(self.device):
+            torch.cuda.empty_cache()
         use_ema = hasattr(self, "eval_model")
-        
+
         eval_model = self.eval_model if use_ema else self.train_model
         eval_model.to(self.device)
         eval_model.eval()
-        if eval_loader is None:
-            eval_loader = self.loader_dict["eval"]
+
+        eval_loader = self.loader_dict["eval"]
 
         total_loss = 0.0
         total_acc = 0.0
@@ -255,11 +213,13 @@ class FixMatch:
 
         if not use_ema:
             eval_model.train()
+        eval_model.cpu()
         
-        return {
-            "eval/loss": total_loss / total_num,
-            "eval/top-1-acc": total_acc / total_num,
-        }
+        loss = total_loss.detach().cpu() / total_num
+        acc = total_acc.detach().cpu() / total_num
+        
+        return loss, acc
+        
 
     def save_run(self, save_name, save_path, cfg=None):
         save_filename = os.path.join(save_path, save_name)
@@ -283,7 +243,7 @@ class FixMatch:
                 "eval_model": eval_model.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
                 "scheduler": self.scheduler.state_dict(),
-                "it": self.it,
+                # "it": self.it,
             },
             save_filename,
         )
