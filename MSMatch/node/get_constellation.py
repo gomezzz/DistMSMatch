@@ -4,7 +4,7 @@ import numpy as np
 import pykep as pk
 
 
-def get_constellation(altitude, inclination, nSats, nPlanes, t0):
+def get_constellation(altitude, inclination, nSats, nPlanes, t0, startingW=0):
     """Creates a constellation with the passed parameters
     Args:
         altitude (float): Altitude in meters.
@@ -30,7 +30,7 @@ def get_constellation(altitude, inclination, nSats, nPlanes, t0):
     # startingW = offset for W that is not accumulating (W = longitude of ascending node)
     # formula for overlapping shells (same altitude, same inclination):
     # (360 / G) / 2 ; G = smallest common multiple of the overlapping nPlanes
-    startingW = 0  # default 0
+    startingW = startingW  # default 0
 
     # W_area: orbital planes are distributed evenly within range [startingW,startingW + maximumW)
     W_area = 360  # default 360
