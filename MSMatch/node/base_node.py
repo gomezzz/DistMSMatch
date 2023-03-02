@@ -28,7 +28,7 @@ class BaseNode:
         
         self.model = self._create_model()
 
-        self.n_gpus = torch.cuda.device_count()
+        self.n_gpus = 1#torch.cuda.device_count()
             
         if rank is not None:
             self.model.set_data_loader(dataloader)

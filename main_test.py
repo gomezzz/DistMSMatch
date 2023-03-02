@@ -9,10 +9,11 @@ from loguru import logger
 import time
 import paseos
 from mpi4py import MPI
+import os
 
 
 
-def main_loop():
+def main_loop(): 
     
     # Load config file
     cfg_path=None
@@ -90,12 +91,13 @@ def main_loop():
     communication_times = []
     communication_over_times = []
     Verbose = False
+    stats=None
     
     total_time = 72*3600 # total number of training rounds
     batch_idx = 0 # starting round
     sim_time = 0
     paseos.set_log_level("INFO")
-    while sim_time <= total_time:
+    while batch_idx <= 11:
         sim_time = node.paseos._state.time
         server_node.time_since_last_global_update += time_per_batch
         if rank == 0:
@@ -171,7 +173,8 @@ def main_loop():
             time_since_last_update += time_per_batch
             
             # perform training for one iteration only
-            train_acc = node.train_one_batch()
+            
+            train_acc,stats = node.train_one_batch(stats)
             train_accuracy.append(train_acc)
             local_time_at_train.append(sim_time)
             batch_idx += 1
@@ -192,7 +195,17 @@ def main_loop():
         else:
             # Standby
             node.perform_activity(activity, power_consumption, time_per_batch)
-        
+
+    os.makedirs("tests", exist_ok=True)
+    
+    for n in range(11):
+        stat_n = stats[n]
+        f = open(os.path.join("tests","test_iteration_"+str(n)+".txt"), 'w')
+        f.write("---------------test_iteration_"+str(n)+"---------------")
+        stat_n.print_all(out=f)
+
+        f.close()
+
     # Save things to become a happy camper
     np.savetxt(f"{cfg.save_path}/test_loss.csv", np.array(test_losses), delimiter=",")
     np.savetxt(f"{cfg.save_path}/test_acc.csv", np.array(test_accuracy), delimiter=",")

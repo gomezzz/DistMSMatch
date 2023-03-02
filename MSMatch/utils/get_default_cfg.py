@@ -31,7 +31,7 @@ def get_default_cfg():
     cfg.T = 0.5
     cfg.amp = False
     cfg.hard_label = True
-    cfg.lb_epochs = 10
+    cfg.lb_epochs = 1
     cfg.scale = 1
     cfg.alpha = 100
     cfg.nodes = 8

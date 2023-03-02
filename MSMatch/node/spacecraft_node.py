@@ -4,6 +4,10 @@ from .base_node import BaseNode
 from paseos import ActorBuilder, SpacecraftActor, GroundstationActor
 import torch
 import os
+try:
+    import yappi
+except: 
+    raise ValueError("You need to install yappi to perform profiling. Please, refer to: https://github.com/sumerc/yappi")
 
 class ServerNode(BaseNode):
     def __init__(
@@ -93,7 +97,7 @@ class SpaceCraftNode(BaseNode):
         logger=None,
     ):
         if comm is not None:
-            rank = comm.get_rank()
+            rank = comm.Get_rank()
         else:
             rank = 0
         super(SpaceCraftNode, self).__init__(rank, cfg, dataloader, logger)
@@ -345,15 +349,23 @@ class SpaceCraftNode(BaseNode):
         if return_code > 0:
             raise ("Activity was interrupted. Constraints no longer true?")
     
-    def train_one_batch(self):
+    def train_one_batch(self, stats=None):
         # wait for nodes ahead in queue to use GPU
         #self.queue_for_gpu()
         # Train the model
-        train_acc = self.model.train_one_batch(self.cfg)
+        with yappi.run():
+            train_acc = self.model.train_one_batch(self.cfg)
         # Announce that gpu is released
         #self.step_out_of_queue_for_gpu()
+
+        stats_i=yappi.get_func_stats()
+
+        if stats is None:
+            stats=[stats_i]
+        else:
+            stats+=[stats_i]
         
-        return train_acc.numpy()
+        return train_acc.numpy(), stats
 
     def evaluate(self):
         loss, acc = self.model.evaluate()
