@@ -153,7 +153,7 @@ class FixMatch:
         logits = self.train_model(inputs)
         logits_x_lb = logits[:num_lb]
         logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
-        del logits, inputs
+        del logits, inputs,x_lb, x_ulb_s, x_ulb_w
 
         sup_loss = cross_entropy_loss(logits_x_lb, y_lb, reduction="mean")
         unsup_loss, mask = consistency_loss(
@@ -175,23 +175,17 @@ class FixMatch:
         with torch.no_grad():
             self._eval_model_update()
             train_accuracy = accuracy(logits_x_lb, y_lb)
-            train_accuracy = train_accuracy[0]
+            train_accuracy = train_accuracy[0].cpu()
 
         # move models away from GPU to free up space
         self.train_model.cpu()
         self.eval_model.cpu()
         
-        x_lb, x_ulb_w, x_ulb_s = (
-                x_lb.cpu(),
-                x_ulb_w.cpu(),
-                x_ulb_s.cpu(),
-            )
-
-        return train_accuracy.cpu()
+        return train_accuracy
 
 
     @torch.no_grad()
-    def evaluate(self):
+    def evaluate(self, eval_loader=None):
         # empty cache (without entering context of current gpu, gpu0 may be initialized)
         with torch.cuda.device(self.device):
             torch.cuda.empty_cache()
@@ -201,7 +195,8 @@ class FixMatch:
         eval_model.to(self.device)
         eval_model.eval()
 
-        eval_loader = self.loader_dict["eval"]
+        if eval_loader is None:
+            eval_loader = self.loader_dict["eval"]
 
         total_loss = 0.0
         total_acc = 0.0

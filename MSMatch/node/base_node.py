@@ -1,7 +1,4 @@
-import os
 import torch
-import numpy as np
-
 from ..utils.get_cosine_schedule_with_warmup import get_cosine_schedule_with_warmup
 from ..utils.get_optimizer import get_optimizer
 from ..utils.get_net_builder import get_net_builder
@@ -19,16 +16,22 @@ class BaseNode:
         self.tb_log = TensorBoardLog(self.save_path, "")
         self.accuracy = []
 
-        self.device = (
-            "cuda:{}".format(self.rank % torch.cuda.device_count())
-            if torch.cuda.is_available()
-            else "cpu"
-        )
-        self.n_gpus = torch.cuda.device_count()
-        
         # Create model
+        if rank is not None:
+            self.device = (
+                "cuda:{}".format(self.rank % torch.cuda.device_count())
+                if torch.cuda.is_available()
+                else "cpu"
+            )
+        else:
+            self.device = "cpu"
+        
         self.model = self._create_model()
-        self.model.set_data_loader(dataloader)
+
+        self.n_gpus = torch.cuda.device_count()
+            
+        if rank is not None:
+            self.model.set_data_loader(dataloader)
 
     def _create_model(self):
         net_builder = get_net_builder(
@@ -104,4 +107,7 @@ class BaseNode:
         self.do_training = True
 
     def save_model(self):
-        torch.save(self.model.train_model, f"{self.save_path}/model.pt") # save trained model
+        if self.cfg.mode == "Swarm":
+            torch.save(self.model.train_model, f"{self.save_path}/model.pt") # save trained model
+        else:
+            torch.save(self.model.train_model, f"{self.sim_path}/node{self.rank}_model.pt") # save trained model

@@ -14,10 +14,10 @@ def get_default_cfg():
     cfg = DotMap(_dynamic=False)
     cfg.dataset = "eurosat_rgb"
     cfg.net = "efficientnet-lite0"
-    cfg.batch_size = 64
+    cfg.batch_size = 32
     cfg.p_cutoff = 0.95
     cfg.lr = 0.03
-    cfg.uratio = 4
+    cfg.uratio = 3
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
     cfg.seed = 42
@@ -36,7 +36,8 @@ def get_default_cfg():
     cfg.alpha = 100
     cfg.nodes = 8
     cfg.planes = 1
-    cfg.time_multiplier = 10
+    cfg.time_multiplier = 1
+    cfg.mode = "FL_geostat"#, "FL_geostat", "Swarm" 
     
     cfg.standby_period = 900  # how long to standby if necessary
 

@@ -1,4 +1,4 @@
-name: distmsmatch
+name: distmsmatch2
 channels:
 - conda-forge
 - pytorch
@@ -26,4 +26,4 @@ dependencies:
 - pip:
   - efficientnet_lite_pytorch
   - efficientnet_lite0_pytorch_model
-  - paseos=0.1.2 
+  - paseos==0.1.2 

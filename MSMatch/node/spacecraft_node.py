@@ -2,34 +2,86 @@ import pykep as pk
 import paseos
 from .base_node import BaseNode
 from paseos import ActorBuilder, SpacecraftActor, GroundstationActor
-
+import torch
+import os
 
 class ServerNode(BaseNode):
     def __init__(
         self,
-        stations,
-        t0,
-        comm,
-        logger
+        cfg,
+        node_ranks,
+        sats_pos_and_v = None
     ):
-        super(BaseNode, self).__init__(comm.Get_rank(), cfg=None, dataloader=None, logger=logger)
-        self.comm = comm
+        super(ServerNode, self).__init__(rank=None, cfg=cfg, dataloader=None, logger=None)
 
-        self.groundstation_actors = []
-        for station in stations:
-            gs_actor = ActorBuilder.get_actor_scaffold(
-            name=station[0], actor_type=GroundstationActor, epoch=t0 )
-            ActorBuilder.set_ground_station_location(
-                gs_actor,
-                latitude=station[1],
-                longitude=station[2],
-                elevation=station[3],
-                minimum_altitude_angle=5,
-            )
-            # paseos_instance.add_known_actor(gs_actor)
-            self.groundstation_actors.append(gs_actor)            
+        # There may be more than one parameter server
+        self.actors = []
+        if cfg.mode == "FL_ground":
+            # Ground stations
+            stations = [
+                ["Maspalomas", 27.7629, -15.6338, 205.1],
+                ["Matera", 40.6486, 16.7046, 536.9],
+                ["Svalbard", 78.9067, 11.8883, 474.0],
+            ]
             
+            
+            for station in stations:
+                gs_actor = ActorBuilder.get_actor_scaffold(
+                name=station[0], actor_type=GroundstationActor, epoch=pk.epoch(0) )
+                ActorBuilder.set_ground_station_location(
+                    gs_actor,
+                    latitude=station[1],
+                    longitude=station[2],
+                    elevation=station[3],
+                    minimum_altitude_angle=5,
+                )
+                # paseos_instance.add_known_actor(gs_actor)
+                self.actors.append(gs_actor)            
+        elif cfg.mode == "FL_geostat":
+            geosat = ActorBuilder.get_actor_scaffold("EDRS-C", SpacecraftActor, epoch=pk.epoch(0))
+            t0 = pk.epoch_from_string("2023-Dec-17 14:42:42")  # starting date of our simulation
+
+            # Compute orbits of geostationary satellite
+            earth = pk.planet.jpl_lp("earth")
+            ActorBuilder.set_orbit(geosat,sats_pos_and_v[0][0],sats_pos_and_v[0][1], t0, earth)
+            self.actors.append(geosat)
         
+        self.node_ranks = node_ranks
+        self.local_updates_incomplete = node_ranks
+        self.time_since_last_global_update = 0
+        
+    def broadcast_global_model(self):
+        torch.save(self.model.train_model, f"{self.sim_path}/global_model.pt") # save global model
+        
+    def update_global_model(self):
+        if self.time_since_last_global_update > 1e3:
+            f = []
+            for (dirpath, dirnames, filenames) in os.walk(self.sim_path):
+                f.extend(filenames)
+                break
+            
+            n_models = 0
+            for filename in f:
+                if "node" in filename:
+                    n_models += 1
+            
+            if n_models > 0:
+                local_sd = self.model.train_model.state_dict()
+                cw = 1 / n_models
+                for i, filename in enumerate(f):
+                    if f"node{i}" in filename:
+                        print(f"Updating global model with node{i}", flush=True)
+                        path = f"{self.sim_path}/node{i}_model.pt"
+                        new_sd = torch.load(path).state_dict()
+                        for key in local_sd:
+                            local_sd[key] += new_sd[key].to(self.device) * cw
+                        os.remove(path)
+                self.time_since_last_global_update = 0
+
+                # update server model with aggregated models
+                self.model.train_model.load_state_dict(local_sd)
+                torch.save(self.model.train_model, f"{self.sim_path}/global_model.pt") # save trained model
+
         
 class SpaceCraftNode(BaseNode):
     def __init__(
@@ -37,10 +89,14 @@ class SpaceCraftNode(BaseNode):
         pos_and_vel,
         cfg,
         dataloader,
-        comm,
-        logger
+        comm=None,
+        logger=None,
     ):
-        super(SpaceCraftNode, self).__init__(comm.Get_rank(), cfg, dataloader, logger)
+        if comm is not None:
+            rank = comm.get_rank()
+        else:
+            rank = 0
+        super(SpaceCraftNode, self).__init__(rank, cfg, dataloader, logger)
         
         # Set up PASEOS instance
         self.earth = pk.planet.jpl_lp("earth")
@@ -77,16 +133,20 @@ class SpaceCraftNode(BaseNode):
         self.paseos = paseos.init_sim(sat, paseos_cfg)
         self.local_actor = self.paseos.local_actor
         
-        self.comm = comm
-        self.other_ranks = [x for x in range(self.comm.Get_size()) if x != self.rank] # get all other process numbers
+        if comm is not None:
+            self.comm = comm
+            self.other_ranks = [x for x in range(self.comm.Get_size()) if x != self.rank] # get all other process numbers
         
-        self.ranks_with_same_gpu = [x for x in range(self.comm.Get_size() ) if x % self.n_gpus ==  self.rank % self.n_gpus]
+            self.ranks_with_same_gpu = [x for x in range(self.comm.Get_size() ) if x % self.n_gpus ==  self.rank % self.n_gpus]
         
         model_size_kb = self._get_model_size_bytes() * 8 / 1e3
         self.comm_duration = model_size_kb / self.local_actor.communication_devices['link'].bandwidth_in_kbps
         print(f'Comm duration: {self.comm_duration} s', flush=True)
         
-        self.update_time = 200
+        self.update_time = 1e3
+    
+    def set_server_node(self, server_node):
+        self.server_node = server_node
 
     def _get_model_size_bytes(self):
         param_size = 0
@@ -140,6 +200,26 @@ class SpaceCraftNode(BaseNode):
         actor._current_activity = actor_data[4]
         return actor
     
+    def comm_to_server(self, verbose = False):
+        
+        window_start = self.local_actor.local_time
+        # we need a window to go back and forth
+        window_end = pk.epoch(self.local_actor.local_time.mjd2000 + 2 * self.comm_duration * pk.SEC2DAY)
+        self.paseos.emtpy_known_actors()  # forget about previously known actors
+        for s in self.server_node.actors:
+            if self.local_actor.is_in_line_of_sight(s, epoch=window_start) and self.local_actor.is_in_line_of_sight(s, epoch=window_end):
+                self.paseos.add_known_actor(s)
+                return
+
+    def get_global_model(self):
+        global_model = torch.load(f"{self.sim_path}/global_model.pt").state_dict()
+        
+        self.model.train_model.load_state_dict(global_model)
+        self.model.train_model.to("cpu")
+        self.model.eval_model.to("cpu")
+        self.model._eval_model_update()
+        
+
     def exchange_actors(self, verbose=False):
         """This function exchanges the states of various actors among all MPI ranks.
 
@@ -201,8 +281,8 @@ class SpaceCraftNode(BaseNode):
         recv_requests = []
         for i in self.ranks_with_same_gpu:
             if i < self.rank and self.other_actors_training[i] == True:
-                if self.rank == 7:
-                    print(f"Waiting for node{i}", flush=True)
+                # if self.rank == 7:
+                #     print(f"Waiting for node{i}", flush=True)
                 recv_requests.append(self.comm.irecv(source=i, tag=int(str(i) + str(self.rank))))
                 
         for recv_request in recv_requests:
@@ -267,11 +347,11 @@ class SpaceCraftNode(BaseNode):
     
     def train_one_batch(self):
         # wait for nodes ahead in queue to use GPU
-        self.queue_for_gpu()
+        #self.queue_for_gpu()
         # Train the model
         train_acc = self.model.train_one_batch(self.cfg)
         # Announce that gpu is released
-        self.step_out_of_queue_for_gpu()
+        #self.step_out_of_queue_for_gpu()
         
         return train_acc.numpy()
 

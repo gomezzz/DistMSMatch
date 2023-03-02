@@ -6,10 +6,9 @@ import MSMatch as mm
 import numpy as np
 import pykep as pk
 from loguru import logger
-from mpi4py import MPI
-import paseos
-import os
 import time
+import paseos
+from mpi4py import MPI
 
 
 
@@ -26,16 +25,10 @@ def main_loop():
     size = comm.Get_size()
     
     # make sure that each satellite has a process
-#    assert (size == cfg.nodes), "number of satellites should equal number of processes"
+    #    assert (size == cfg.nodes), "number of satellites should equal number of processes"
     print(f"Starting rank {rank}", flush=True)
     
     # PASEOS setup
-    altitude = 786 * 1000  # altitude above the Earth's ground [m]
-    inclination = 98.62  # inclination of the orbit
-    nPlanes = cfg.planes # the number of orbital planes (see linked wiki article)
-    nSats = cfg.nodes // nPlanes # the number of satellites per orbital plane
-    t0 = pk.epoch_from_string("2023-Dec-17 14:42:42")  # starting date of our simulation
-    
     # Number of training iterations per round (number of times we sample a batch) is based on local epochs and how regularly we evaluate the model.
     # Note that batch size here only refers to the supervised part, so the real batch size
     # is cfg.batch_size * (1 + cfg.ulb_ratio)
@@ -43,30 +36,51 @@ def main_loop():
     # Create dataloaders for all nodes
     node_dls, cfg = mm.create_node_dataloaders(cfg)
     
+        # Create node
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    if cfg.mode == "Swarm":
+        cfg.sim_path = cfg.save_dir + f"ISL/{timestr}"
+    elif cfg.mode == "FL_ground":
+        cfg.sim_path = cfg.save_dir + f"FL_ground/{timestr}"
+    elif cfg.mode == "FL_geostat":
+        cfg.sim_path = cfg.save_dir + f"FL_geostat/{timestr}"
+        
+    cfg.save_path = cfg.sim_path + f"/node{rank}"
+    altitude = 786 * 1000  # altitude above the Earth's ground [m]
+    inclination = 98.62  # inclination of the orbit
+    nPlanes = cfg.planes # the number of orbital planes (see linked wiki article)
+    nSats = cfg.nodes // nPlanes # the number of satellites per orbital plane
+    t0 = pk.epoch_from_string("2023-Dec-17 14:42:42")  # starting date of our simulation
     # Compute orbits of LEO satellites
     planet_list,sats_pos_and_v = mm.get_constellation(altitude, inclination, nSats, nPlanes, t0)
-
-    # Create node
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    cfg.sim_path = cfg.save_dir + f"ISL/{timestr}"
-    cfg.save_path = cfg.sim_path + f"/node{rank}"
-    node = mm.SpaceCraftNode(sats_pos_and_v[rank], cfg, node_dls[rank], comm, logger)
-
-    # Ground stations
-    stations = [
-        ["Maspalomas", 27.7629, -15.6338, 205.1],
-        ["Matera", 40.6486, 16.7046, 536.9],
-        ["Svalbard", 78.9067, 11.8883, 474.0],
-    ]
     
+
+    
+    # create parameter server if needed
+    if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
+        node = mm.SpaceCraftNode(sats_pos_and_v[2*rank], cfg, node_dls[2*rank], comm, logger)
+        # orbit_duration = planet_list[0].compute_period(t0)
+        
+        planet_list, sats_pos_and_v = mm.get_constellation(altitude=35786 * 1000,inclination=0,nSats=1,nPlanes=1,t0=t0,startingW=31)
+        server_node = mm.ServerNode(cfg, list(range(size)), sats_pos_and_v)
+        if rank == 0:
+            server_node.broadcast_global_model()
+        comm.Barrier() # make sure all nodes wait for the global model to be stored
+        node.set_server_node(server_node)
+        node.get_global_model() # receive the global model to start from
+        
+    else:
+        node = mm.SpaceCraftNode(sats_pos_and_v[rank], cfg, node_dls[rank], comm, logger)
+        server_node = None
+        
     #------------------------------------
     # Enter main loop
     #------------------------------------
     time_in_standby = 0
     time_since_last_update = 0
-    time_per_batch = 5.0
+    time_per_batch = 10.0
     time_for_comms = node.comm_duration
-    standby_period = 900  # how long to standby if necessary
+    standby_period = 1e3  # how long to standby if necessary
     model_update_countdown = -1
     test_losses = []
     test_accuracy = []
@@ -75,15 +89,17 @@ def main_loop():
     local_time_at_test = []
     communication_times = []
     communication_over_times = []
+    Verbose = False
     
-    total_batches = 1000 # total number of training rounds
+    total_time = 72*3600 # total number of training rounds
     batch_idx = 0 # starting round
     sim_time = 0
     paseos.set_log_level("INFO")
-    while batch_idx <= total_batches:
+    while sim_time <= total_time:
         sim_time = node.paseos._state.time
-        # if node.rank == 0:
-        #     print(f"Time: {sim_time}", flush=True)
+        server_node.time_since_last_global_update += time_per_batch
+        if rank == 0:
+            print(f"batch: {batch_idx}, time: {sim_time}", flush=True, end="\r")
         
         if model_update_countdown > 0:
             # if we have shared models, we make sure to do the 
@@ -99,30 +115,53 @@ def main_loop():
             )
             
             comm.Barrier() # sync all models in time
-            node.exchange_actors(verbose=False)  # Find out what actors can be seen and what the other actors are doing
+            if cfg.mode == "Swarm":
+                node.exchange_actors(verbose=False)  # Find out what actors can be seen and what the other actors are doing
+            else:
+                node.comm_to_server() # find out if we can communicate to a server node
+                # aggregate global model from buffered models
+                if  node.rank == 0:
+                    server_node.update_global_model()
+                    
         # run the current activity (Model update, training, or standby)
         if activity == "Model_update":
             if model_update_countdown == -1:
-                print(
-                    f"Node{rank} will update with {node.paseos.known_actor_names} at {sim_time}", flush=True
-                )
+                if Verbose == True:
+                    print(
+                        f"Node{rank} will update with {node.paseos.known_actor_names} at {sim_time}", flush=True
+                    )
+                    
+                # update the node model
+                if cfg.mode == "Swarm":
+                    node.aggregate()
+                    communication_times.append(sim_time)
+                    model_update_countdown = time_for_comms // time_per_batch
+                else:
+                    # upload current local model and receive new global
+                    communication_times.append(sim_time)
+                    model_update_countdown = 2*time_for_comms // time_per_batch
+                    
+                    
                 
-                # sync on actor positions and update on line-of-sights
-                node.aggregate()
-                communication_times.append(sim_time)
                 
-                time_since_last_update = 0
-                model_update_countdown = time_for_comms // time_per_batch
             else:
                 model_update_countdown -= 1
+                # the communications for updating is over
                 if model_update_countdown < 0:
+                    if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
+                        node.get_global_model() # get current global model
                     communication_over_times.append(sim_time)
                     loss, acc = node.evaluate()
                     test_losses.append(loss)
                     test_accuracy.append(acc)
                     local_time_at_test.append(sim_time)
+                    time_since_last_update = 0
+                    
                     print(f"Rank {node.rank}, post aggregation: eval acc: {acc}", flush=True)
-            
+                # the client model reached the server node
+                elif model_update_countdown == time_for_comms // time_per_batch + 1:
+                    node.save_model() # "communicate" the local model to the server
+                    
             # increase time for communication
             node.perform_activity(activity, power_consumption, time_per_batch)
         
@@ -137,18 +176,19 @@ def main_loop():
             local_time_at_train.append(sim_time)
             batch_idx += 1
             
-            if batch_idx % 25 == 0:
+            if batch_idx % 100 == 0 or batch_idx == 0:
                 loss, acc = node.evaluate()
                 test_losses.append(loss)
                 test_accuracy.append(acc)
                 local_time_at_test.append(sim_time)
-                print(f"Simulation time: {sim_time} "
-                    + f"Rank {node.rank}, batch_idx {batch_idx}: eval acc: {acc} "
-                    + f"Temp: {node.local_actor.temperature_in_K - 273.15:.2f} "
-                    + f"Battery SoC: {node.local_actor.state_of_charge:.2f}", flush=True)
+                if rank == 0:
+                    print(f"Simulation time: {sim_time} "
+                        + f"Rank {node.rank}, batch_idx {batch_idx}: eval acc: {acc} "
+                        + f"Temp: {node.local_actor.temperature_in_K - 273.15:.2f} "
+                        + f"Battery SoC: {node.local_actor.state_of_charge:.2f}", flush=True)
             
-                
-                node.save_model() # save model to folder
+                if cfg.mode == "Swarm":
+                    node.save_model() # save model to folder
         else:
             # Standby
             node.perform_activity(activity, power_consumption, time_per_batch)
