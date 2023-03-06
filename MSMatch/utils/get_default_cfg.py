@@ -21,7 +21,7 @@ def get_default_cfg():
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
     cfg.seed = 42
-    cfg.num_labels = 1000
+    cfg.num_labels = 200
     cfg.opt = "SGD"
     cfg.pretrained = False
     cfg.save_dir = "./results/"
@@ -37,7 +37,7 @@ def get_default_cfg():
     cfg.nodes = 8
     cfg.planes = 1
     cfg.time_multiplier = 1
-    cfg.mode = "FL_geostat"#, "FL_geostat", "Swarm" 
+    cfg.mode = "Swarm"# "FL_ground", "FL_geostat", "Swarm" 
     
     cfg.standby_period = 900  # how long to standby if necessary
 

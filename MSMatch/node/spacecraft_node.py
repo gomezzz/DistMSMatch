@@ -59,23 +59,33 @@ class ServerNode(BaseNode):
             for (dirpath, dirnames, filenames) in os.walk(self.sim_path):
                 f.extend(filenames)
                 break
-            
-            n_models = 0
+
+            local_model_paths = []
             for filename in f:
                 if "node" in filename:
-                    n_models += 1
-            
-            if n_models > 0:
+                    local_model_paths.append(filename)
+
+            n_models = len(local_model_paths)
+            # make sure that we have at least 3 models to aggregate
+            if n_models > 2:
                 local_sd = self.model.train_model.state_dict()
-                cw = 1 / n_models
-                for i, filename in enumerate(f):
-                    if f"node{i}" in filename:
-                        print(f"Updating global model with node{i}", flush=True)
-                        path = f"{self.sim_path}/node{i}_model.pt"
-                        new_sd = torch.load(path).state_dict()
-                        for key in local_sd:
-                            local_sd[key] += new_sd[key].to(self.device) * cw
+                cw = 1 / (n_models)
+                
+                local_models = []
+                for filename in local_model_paths:
+                    print(f"Updating global model with {filename}", flush=True)
+                    path = f"{self.sim_path}/{filename}"
+                    try:
+                        local_models.append(torch.load(path).state_dict())
                         os.remove(path)
+                    except:
+                        print("Load not successful", flush=True)
+                
+                for key in local_sd:
+                    local_sd[key] = sum([sd[key] * cw for sd in local_models])
+
+                
+                
                 self.time_since_last_global_update = 0
 
                 # update server model with aggregated models
@@ -93,7 +103,7 @@ class SpaceCraftNode(BaseNode):
         logger=None,
     ):
         if comm is not None:
-            rank = comm.get_rank()
+            rank = comm.Get_rank()
         else:
             rank = 0
         super(SpaceCraftNode, self).__init__(rank, cfg, dataloader, logger)
@@ -126,8 +136,11 @@ class SpaceCraftNode(BaseNode):
             actor_emissive_area=0.1,
             actor_thermal_capacity=6000,
         )
-        
-        ActorBuilder.add_comm_device(sat, device_name="link", bandwidth_in_kbps=1000)
+        if cfg.mode == "Swarm":
+            bw = 100000
+        else:
+            bw = 1000
+        ActorBuilder.add_comm_device(sat, device_name="link", bandwidth_in_kbps=bw)
         
         paseos_cfg = paseos.load_default_cfg()  # loading paseos cfg to modify defaults        
         self.paseos = paseos.init_sim(sat, paseos_cfg)
@@ -212,12 +225,18 @@ class SpaceCraftNode(BaseNode):
                 return
 
     def get_global_model(self):
-        global_model = torch.load(f"{self.sim_path}/global_model.pt").state_dict()
+        # We might attempt to load at the same time as model is being saved.
+        try:
+            global_model = torch.load(f"{self.sim_path}/global_model.pt").state_dict()
+            self.model.train_model.load_state_dict(global_model)
+            self.model.train_model.to("cpu")
+            self.model.eval_model.to("cpu")
+            self.model._eval_model_update()
+            return True
+        except:
+            print(f"Node{self.rank} could not load global model")
         
-        self.model.train_model.load_state_dict(global_model)
-        self.model.train_model.to("cpu")
-        self.model.eval_model.to("cpu")
-        self.model._eval_model_update()
+        return False
         
 
     def exchange_actors(self, verbose=False):
@@ -322,7 +341,10 @@ class SpaceCraftNode(BaseNode):
             and self.local_actor.temperature_in_K < 273.15 + 45
         ):
             self.local_actor._current_activity = "Model_update"
-            return "Model_update", 10, 0
+            if self.cfg.mode == "Swarm":
+                return "Model_update", 13.5, 0
+            else:
+                return "Model_update", 10, 0
         elif (
             self.local_actor.temperature_in_K > (273.15 + 40)
             or self.local_actor.state_of_charge < 0.2

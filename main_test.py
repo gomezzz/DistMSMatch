@@ -78,7 +78,7 @@ def main_loop():
     #------------------------------------
     time_in_standby = 0
     time_since_last_update = 0
-    time_per_batch = 10.0
+    time_per_batch = 16
     time_for_comms = node.comm_duration
     standby_period = 1e3  # how long to standby if necessary
     model_update_countdown = -1
@@ -91,13 +91,16 @@ def main_loop():
     communication_over_times = []
     Verbose = False
     
-    total_time = 72*3600 # total number of training rounds
+    total_time = 15*24*3600 # total number of training rounds
     batch_idx = 0 # starting round
     sim_time = 0
     paseos.set_log_level("INFO")
     while sim_time <= total_time:
         sim_time = node.paseos._state.time
-        server_node.time_since_last_global_update += time_per_batch
+        
+        if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
+            server_node.time_since_last_global_update += time_per_batch
+        
         if rank == 0:
             print(f"batch: {batch_idx}, time: {sim_time}", flush=True, end="\r")
         
@@ -135,32 +138,37 @@ def main_loop():
                 if cfg.mode == "Swarm":
                     node.aggregate()
                     communication_times.append(sim_time)
-                    model_update_countdown = time_for_comms // time_per_batch
+                    model_update_countdown = 2*time_for_comms // time_per_batch # transmit to two neighbors
                 else:
                     # upload current local model and receive new global
                     communication_times.append(sim_time)
-                    model_update_countdown = 2*time_for_comms // time_per_batch
-                    
-                    
-                
-                
+                    model_update_countdown = 2*time_for_comms // time_per_batch # transmit and receive form server
+
             else:
                 model_update_countdown -= 1
                 # the communications for updating is over
                 if model_update_countdown < 0:
                     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-                        node.get_global_model() # get current global model
+                        model_loaded = node.get_global_model() # get current global model
+                        if model_loaded:
+                            time_since_last_update = 0
+                        else:
+                            # make sure to get back in here next iteration
+                            model_update_countdown += 1
+                    else:
+                        time_since_last_update = 0
                     communication_over_times.append(sim_time)
                     loss, acc = node.evaluate()
                     test_losses.append(loss)
                     test_accuracy.append(acc)
                     local_time_at_test.append(sim_time)
-                    time_since_last_update = 0
+                    
                     
                     print(f"Rank {node.rank}, post aggregation: eval acc: {acc}", flush=True)
                 # the client model reached the server node
                 elif model_update_countdown == time_for_comms // time_per_batch + 1:
-                    node.save_model() # "communicate" the local model to the server
+                    if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
+                        node.save_model() # "communicate" the local model to the server
                     
             # increase time for communication
             node.perform_activity(activity, power_consumption, time_per_batch)
@@ -176,7 +184,7 @@ def main_loop():
             local_time_at_train.append(sim_time)
             batch_idx += 1
             
-            if batch_idx % 100 == 0 or batch_idx == 0:
+            if batch_idx % 50 == 0 or batch_idx == 0:
                 loss, acc = node.evaluate()
                 test_losses.append(loss)
                 test_accuracy.append(acc)
