@@ -72,8 +72,6 @@ class FixMatch:
             param_k.requires_grad = False  # not update by gradient for eval_net
 
         self.eval_model.eval()
-        
-        
 
     @torch.no_grad()
     def _eval_model_update(self):
@@ -101,7 +99,9 @@ class FixMatch:
     def set_data_loader(self, loader_dict):
         self.loader_dict = loader_dict
         self.print_fn(f"[!] data loader keys: {self.loader_dict.keys()}")
-        self.lb_iterator = iter(self.loader_dict["train_lb"])  # iterator for labeled data
+        self.lb_iterator = iter(
+            self.loader_dict["train_lb"]
+        )  # iterator for labeled data
         self.ulb_iterator = iter(self.loader_dict["train_ulb"])
 
     def set_optimizer(self, optimizer, scheduler=None):
@@ -124,7 +124,7 @@ class FixMatch:
         except StopIteration:
             self.ulb_iterator = iter(self.loader_dict["train_ulb"])
             (x_ulb_w, x_ulb_s, _) = next(self.ulb_iterator)
-        
+
         # sample a batch of labeled data
         try:
             (x_lb, y_lb) = next(self.lb_iterator)
@@ -153,7 +153,7 @@ class FixMatch:
         logits = self.train_model(inputs)
         logits_x_lb = logits[:num_lb]
         logits_x_ulb_w, logits_x_ulb_s = logits[num_lb:].chunk(2)
-        del logits, inputs,x_lb, x_ulb_s, x_ulb_w
+        del logits, inputs, x_lb, x_ulb_s, x_ulb_w
 
         sup_loss = cross_entropy_loss(logits_x_lb, y_lb, reduction="mean")
         unsup_loss, mask = consistency_loss(
@@ -180,9 +180,8 @@ class FixMatch:
         # move models away from GPU to free up space
         self.train_model.cpu()
         self.eval_model.cpu()
-        
-        return train_accuracy
 
+        return train_accuracy
 
     @torch.no_grad()
     def evaluate(self, eval_loader=None):
@@ -216,12 +215,11 @@ class FixMatch:
         if not use_ema:
             eval_model.train()
         eval_model.cpu()
-        
+
         loss = total_loss.detach().cpu() / total_num
         acc = total_acc.detach().cpu() / total_num
-        
+
         return loss, acc
-        
 
     def save_run(self, save_name, save_path, cfg=None):
         save_filename = os.path.join(save_path, save_name)

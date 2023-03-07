@@ -68,7 +68,7 @@ class SSL_Dataset:
         train=True,
         data_dir="./data",
         seed=42,
-        alpha=1.0,
+        alpha=100,
         nodes=1,
         node_indx=1,
     ):

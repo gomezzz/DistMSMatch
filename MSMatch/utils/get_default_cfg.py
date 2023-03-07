@@ -1,7 +1,6 @@
 from dotmap import DotMap
-
 import os
-
+import time
 from .create_dir_string import create_dir_str
 
 
@@ -21,9 +20,10 @@ def get_default_cfg():
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
     cfg.seed = 42
-    cfg.num_labels = 200
+    cfg.num_labels = 50
+    cfg.num_train_iter = (100 * cfg.num_labels) // cfg.batch_size
     cfg.opt = "SGD"
-    cfg.pretrained = False
+    cfg.pretrained = True
     cfg.save_dir = "./results/"
     cfg.ema_m = 0.99
     cfg.eval_batch_size = 512
@@ -31,17 +31,21 @@ def get_default_cfg():
     cfg.T = 0.5
     cfg.amp = False
     cfg.hard_label = True
-    cfg.lb_epochs = 10
     cfg.scale = 1
     cfg.alpha = 100
     cfg.nodes = 8
     cfg.planes = 1
     cfg.time_multiplier = 1
-    cfg.mode = "Swarm"# "FL_ground", "FL_geostat", "Swarm" 
+    cfg.mode = "FL_ground"# "FL_ground", "FL_geostat", "Swarm" 
     
     cfg.standby_period = 900  # how long to standby if necessary
-
-    dir_name = create_dir_str(cfg)
-    cfg.save_path = os.path.join(cfg.save_dir, dir_name)
-
+    
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    if cfg.mode == "Swarm":
+        cfg.sim_path = cfg.save_dir + f"ISL/{timestr}"
+    elif cfg.mode == "FL_ground":
+        cfg.sim_path = cfg.save_dir + f"FL_ground/{timestr}"
+    elif cfg.mode == "FL_geostat":
+        cfg.sim_path = cfg.save_dir + f"FL_geostat/{timestr}"
+    
     return cfg

@@ -25,8 +25,8 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         seed=42,
         num_labels=100,
         nodes=2,
-        alpha=0.2,
-        node_indx=1,
+        alpha=100,
+        node_indx=0,
     ):
         """_summary_
 
@@ -58,10 +58,16 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
     def _load_data(self):
         """Loads the data from the passed root directory. Splits in test/train based on seed. By default resized to 256,256"""
 
-        # if folder exists and config matches, load from folder.
-        # otherwise, create partitioning
+        # if data partitioning for the given config exists, use it 
         data_folder = self._look_for_data()
 
+        # If the data partitioning does not exist:
+        # 1. Load all the data 
+        # 2. Convert label strings to a class index
+        # 3. Create training and test sets
+        # 4. Split training data into labeled and unlabeled parts
+        # 5. Partition the unlabeled part using Latent Dirichlet Allocation into number of nodes
+        # 6. Save partitions to folders
         if not self.data_exist:
             # load all images
             images = np.zeros([self.N, self.size[0], self.size[1], 3], dtype="uint8")
@@ -133,7 +139,8 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
                 include_lb_to_ulb=False,
             )
 
-            # Partition unlabeled data between clients
+            # Partition unlabeled data between clients, 
+            # returns a list of indices that goes into each partition from ulb data
             node_dataidx_map = self._partition_data(ulb_targets)
 
             # save unlabeled training data for each node
@@ -151,6 +158,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
 
         # load data from folder
         if self.train:
+            # Unlabeled data is node specific
             client_data_folder = data_folder + f"/node_{self.node_indx}"
             self.ul_data = np.load(client_data_folder + "ul-data.npy")
             self.ul_targets = np.load(client_data_folder + "ul-targets.npy")  # not used
@@ -160,6 +168,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
                 f"Node {self.node_indx} unlabeled class distribution:{self.ul_cls_counts}"
             )
 
+            # Labeled data is the same for all
             self.lb_data = np.load(data_folder + "/lb-data.npy")
             self.lb_targets = np.load(data_folder + "/lb-targets.npy")
             self.lb_cls_counts = self._node_cls_count(self.lb_targets)
@@ -175,6 +184,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
             )
 
     def _look_for_data(self):
+        
         data_folder = None
         if not self.data_exist:
             data_dir = (
@@ -216,7 +226,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
             labels (_type_): labels in the original dataset
 
         Returns:
-            _type_: _description_
+            _type_: list of data indices for each partition
         """
         n_labels = labels.shape[0]
         class_num = np.unique(labels)

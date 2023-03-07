@@ -5,14 +5,12 @@ from paseos import ActorBuilder, SpacecraftActor, GroundstationActor
 import torch
 import os
 
+
 class ServerNode(BaseNode):
-    def __init__(
-        self,
-        cfg,
-        node_ranks,
-        sats_pos_and_v = None
-    ):
-        super(ServerNode, self).__init__(rank=None, cfg=cfg, dataloader=None, logger=None)
+    def __init__(self, cfg, node_ranks, sats_pos_and_v=None):
+        super(ServerNode, self).__init__(
+            rank=None, cfg=cfg, dataloader=None, logger=None
+        )
 
         # There may be more than one parameter server
         self.actors = []
@@ -23,11 +21,11 @@ class ServerNode(BaseNode):
                 ["Matera", 40.6486, 16.7046, 536.9],
                 ["Svalbard", 78.9067, 11.8883, 474.0],
             ]
-            
-            
+
             for station in stations:
                 gs_actor = ActorBuilder.get_actor_scaffold(
-                name=station[0], actor_type=GroundstationActor, epoch=pk.epoch(0) )
+                    name=station[0], actor_type=GroundstationActor, epoch=pk.epoch(0)
+                )
                 ActorBuilder.set_ground_station_location(
                     gs_actor,
                     latitude=station[1],
@@ -36,22 +34,33 @@ class ServerNode(BaseNode):
                     minimum_altitude_angle=5,
                 )
                 # paseos_instance.add_known_actor(gs_actor)
-                self.actors.append(gs_actor)            
+                self.actors.append(gs_actor)
         elif cfg.mode == "FL_geostat":
-            geosat = ActorBuilder.get_actor_scaffold("EDRS-C", SpacecraftActor, epoch=pk.epoch(0))
-            t0 = pk.epoch_from_string("2023-Dec-17 14:42:42")  # starting date of our simulation
+            geosat = ActorBuilder.get_actor_scaffold(
+                "EDRS-C", SpacecraftActor, epoch=pk.epoch(0)
+            )
+            t0 = pk.epoch_from_string(
+                "2023-Dec-17 14:42:42"
+            )  # starting date of our simulation
 
             # Compute orbits of geostationary satellite
             earth = pk.planet.jpl_lp("earth")
-            ActorBuilder.set_orbit(geosat,sats_pos_and_v[0][0],sats_pos_and_v[0][1], t0, earth)
+            ActorBuilder.set_orbit(
+                geosat, sats_pos_and_v[0][0], sats_pos_and_v[0][1], t0, earth
+            )
             self.actors.append(geosat)
-        
+
         self.node_ranks = node_ranks
         self.local_updates_incomplete = node_ranks
         self.time_since_last_global_update = 0
-        
+
     def broadcast_global_model(self):
-        torch.save(self.model.train_model, f"{self.sim_path}/global_model.pt") # save global model
+        torch.save(
+            self.model.train_model, f"{self.sim_path}/global_model.pt"
+        )  # save global model
+
+    def update_time_since_update(self, dt):
+        self.time_since_last_global_update += dt
         
     def update_global_model(self):
         if self.time_since_last_global_update > 1e3:
@@ -70,7 +79,7 @@ class ServerNode(BaseNode):
             if n_models > 2:
                 local_sd = self.model.train_model.state_dict()
                 cw = 1 / (n_models)
-                
+
                 local_models = []
                 for filename in local_model_paths:
                     print(f"Updating global model with {filename}", flush=True)
@@ -80,19 +89,19 @@ class ServerNode(BaseNode):
                         os.remove(path)
                     except:
                         print("Load not successful", flush=True)
-                
+
                 for key in local_sd:
                     local_sd[key] = sum([sd[key] * cw for sd in local_models])
 
-                
-                
                 self.time_since_last_global_update = 0
 
                 # update server model with aggregated models
                 self.model.train_model.load_state_dict(local_sd)
-                torch.save(self.model.train_model, f"{self.sim_path}/global_model.pt") # save trained model
+                torch.save(
+                    self.model.train_model, f"{self.sim_path}/global_model.pt"
+                )  # save trained model
 
-        
+
 class SpaceCraftNode(BaseNode):
     def __init__(
         self,
@@ -107,13 +116,11 @@ class SpaceCraftNode(BaseNode):
         else:
             rank = 0
         super(SpaceCraftNode, self).__init__(rank, cfg, dataloader, logger)
-        
+
         # Set up PASEOS instance
         self.earth = pk.planet.jpl_lp("earth")
         id = f"sat{self.rank}"
-        sat = ActorBuilder.get_actor_scaffold(
-            id, SpacecraftActor, pk.epoch(0)
-        )
+        sat = ActorBuilder.get_actor_scaffold(id, SpacecraftActor, pk.epoch(0))
         ActorBuilder.set_orbit(
             sat, pos_and_vel[0], pos_and_vel[1], pk.epoch(0), self.earth
         )
@@ -136,28 +143,31 @@ class SpaceCraftNode(BaseNode):
             actor_emissive_area=0.1,
             actor_thermal_capacity=6000,
         )
-        if cfg.mode == "Swarm":
-            bw = 100000
+        if cfg.mode == "Swarm" or cfg.mode == "FL_geostat":
+            bw = 100000 # 100 Mbps (optical link)
         else:
-            bw = 1000
+            bw = 1000 # 1 Mbps (RF link)
         ActorBuilder.add_comm_device(sat, device_name="link", bandwidth_in_kbps=bw)
-        
-        paseos_cfg = paseos.load_default_cfg()  # loading paseos cfg to modify defaults        
+
+        paseos_cfg = paseos.load_default_cfg()  # loading paseos cfg to modify defaults
         self.paseos = paseos.init_sim(sat, paseos_cfg)
         self.local_actor = self.paseos.local_actor
-        
+
         if comm is not None:
             self.comm = comm
-            self.other_ranks = [x for x in range(self.comm.Get_size()) if x != self.rank] # get all other process numbers
-        
-            self.ranks_with_same_gpu = [x for x in range(self.comm.Get_size() ) if x % self.n_gpus ==  self.rank % self.n_gpus]
-        
+            self.other_ranks = [
+                x for x in range(self.comm.Get_size()) if x != self.rank
+            ]  # get all other process numbers
+
         model_size_kb = self._get_model_size_bytes() * 8 / 1e3
-        self.comm_duration = model_size_kb / self.local_actor.communication_devices['link'].bandwidth_in_kbps
-        print(f'Comm duration: {self.comm_duration} s', flush=True)
-        
+        self.comm_duration = (
+            model_size_kb
+            / self.local_actor.communication_devices["link"].bandwidth_in_kbps
+        )
+        print(f"Comm duration: {self.comm_duration} s", flush=True)
+
         self.update_time = 1e3
-    
+
     def set_server_node(self, server_node):
         self.server_node = server_node
 
@@ -169,8 +179,8 @@ class SpaceCraftNode(BaseNode):
         for buffer in self.model.train_model.buffers():
             buffer_size += buffer.nelement() * buffer.element_size()
 
-        size_all_bytes = (param_size + buffer_size) 
-        print('model size: {:.3f}MB'.format(size_all_bytes // 1024**2), flush=True)
+        size_all_bytes = param_size + buffer_size
+        print("model size: {:.3f}MB".format(size_all_bytes // 1024**2), flush=True)
         return size_all_bytes
 
     def _encode_actor(self):
@@ -190,7 +200,7 @@ class SpaceCraftNode(BaseNode):
         data.append(v)
         data.append(self.local_actor.current_activity)
         return data
-    
+
     def _parse_actor_data(self, actor_data):
         """Decode an actor from a data list
 
@@ -212,15 +222,19 @@ class SpaceCraftNode(BaseNode):
         )
         actor._current_activity = actor_data[4]
         return actor
-    
-    def comm_to_server(self, verbose = False):
-        
+
+    def check_if_sever_available(self):
+
         window_start = self.local_actor.local_time
         # we need a window to go back and forth
-        window_end = pk.epoch(self.local_actor.local_time.mjd2000 + 2 * self.comm_duration * pk.SEC2DAY)
+        window_end = pk.epoch(
+            self.local_actor.local_time.mjd2000 + 2 * self.comm_duration * pk.SEC2DAY
+        )
         self.paseos.emtpy_known_actors()  # forget about previously known actors
         for s in self.server_node.actors:
-            if self.local_actor.is_in_line_of_sight(s, epoch=window_start) and self.local_actor.is_in_line_of_sight(s, epoch=window_end):
+            if self.local_actor.is_in_line_of_sight(
+                s, epoch=window_start
+            ) and self.local_actor.is_in_line_of_sight(s, epoch=window_end):
                 self.paseos.add_known_actor(s)
                 return
 
@@ -235,9 +249,8 @@ class SpaceCraftNode(BaseNode):
             return True
         except:
             print(f"Node{self.rank} could not load global model")
-        
+
         return False
-        
 
     def exchange_actors(self, verbose=False):
         """This function exchanges the states of various actors among all MPI ranks.
@@ -250,7 +263,7 @@ class SpaceCraftNode(BaseNode):
             rank (int): Rank's index.
         """
         if verbose:
-            print(f"Rank {self.rank} starting actor exchange.")
+            print(f"Rank {self.rank} starting actor exchange.", flush=True)
         send_requests = []  # track our send requests
         recv_requests = []  # track our receive request
         self.paseos.emtpy_known_actors()  # forget about previously known actors
@@ -264,24 +277,30 @@ class SpaceCraftNode(BaseNode):
 
         # Receive from other ranks
         for i in self.other_ranks:
-            recv_requests.append(self.comm.irecv(source=i, tag=int(str(i) + str(self.rank))))
+            recv_requests.append(
+                self.comm.irecv(source=i, tag=int(str(i) + str(self.rank)))
+            )
 
         # Wait for data to arrive
         window_end = pk.epoch(
             self.local_actor.local_time.mjd2000 + self.comm_duration * pk.SEC2DAY
         )
-        
+
         self.ranks_in_lineofsight = []
         self.other_actors_training = []
         window_start = self.local_actor.local_time
-        window_end = pk.epoch(self.local_actor.local_time.mjd2000 + self.comm_duration * pk.SEC2DAY)
+        window_end = pk.epoch(
+            self.local_actor.local_time.mjd2000 + self.comm_duration * pk.SEC2DAY
+        )
         for i, recv_request in enumerate(recv_requests):
             other_actor_data = recv_request.wait()
             other_actor = self._parse_actor_data(other_actor_data)
             is_training = other_actor.current_activity == "Training"
             self.other_actors_training.append(is_training)
-            
-            if self.local_actor.is_in_line_of_sight(other_actor, epoch=window_start) and self.local_actor.is_in_line_of_sight(other_actor, epoch=window_end):
+
+            if self.local_actor.is_in_line_of_sight(
+                other_actor, epoch=window_start
+            ) and self.local_actor.is_in_line_of_sight(other_actor, epoch=window_end):
                 self.paseos.add_known_actor(other_actor)
                 self.ranks_in_lineofsight.append(self.other_ranks[i])
 
@@ -291,33 +310,10 @@ class SpaceCraftNode(BaseNode):
 
         if verbose:
             print(
-                f"Rank {self.rank} completed actor exchange. Knows {self.paseos.known_actor_names} now.", flush=True
+                f"Rank {self.rank} completed actor exchange. Knows {self.paseos.known_actor_names} now.",
+                flush=True,
             )
-    
-    def queue_for_gpu(self, verbose=False):
-        
-        # Wait for ranks ahead to announce they are done
-        recv_requests = []
-        for i in self.ranks_with_same_gpu:
-            if i < self.rank and self.other_actors_training[i] == True:
-                # if self.rank == 7:
-                #     print(f"Waiting for node{i}", flush=True)
-                recv_requests.append(self.comm.irecv(source=i, tag=int(str(i) + str(self.rank))))
-                
-        for recv_request in recv_requests:
-            data = recv_request.wait()
-        
-    def step_out_of_queue_for_gpu(self):
-        # announce to all devices sharing the GPU that GPU is released
-        send_requests = []
-        for i in self.ranks_with_same_gpu:
-            if i > self.rank:
-                send_requests.append(
-                    self.comm.isend(1, dest=i, tag=int(str(self.rank) + str(i)))
-                )
-        for send_request in send_requests:
-            send_request.wait()
-    
+
     def decide_on_activity(
         self,
         timestep,
@@ -357,25 +353,19 @@ class SpaceCraftNode(BaseNode):
             # https://unibap.com/wp-content/uploads/2021/06/spacecloud-ix5-100-product-overview_v23.pdf
             self.local_actor._current_activity = "Training"
             return "Training", 30, 0
-    
+
     def perform_activity(self, activity, power_consumption, time_to_run):
         return_code = self.paseos.advance_time(
             time_to_run,
             current_power_consumption_in_W=power_consumption,
-            constraint_function=self.constraint_func
+            constraint_function=self.constraint_func,
         )
         if return_code > 0:
             raise ("Activity was interrupted. Constraints no longer true?")
-    
+
     def train_one_batch(self):
-        # wait for nodes ahead in queue to use GPU
-        #self.queue_for_gpu()
-        # Train the model
         train_acc = self.model.train_one_batch(self.cfg)
-        # Announce that gpu is released
-        #self.step_out_of_queue_for_gpu()
-        
-        return train_acc.numpy()
+        return train_acc.cpu().numpy()
 
     def evaluate(self):
         loss, acc = self.model.evaluate()
@@ -399,3 +389,27 @@ class SpaceCraftNode(BaseNode):
 
         return True
 
+    def aggregate(self):
+        # self.logger.info(f"Node {self.rank}: aggregating neighbor models")
+        self.model.train_model.to(self.device)
+        local_sd = self.model.train_model.state_dict()
+        # neighbor_sd = [m.state_dict() for m in rx_models]
+        cw = 1 / (len(self.ranks_in_lineofsight) + 1)
+
+        for key in local_sd:
+            local_sd[key] = cw * local_sd[key].to(self.device)
+
+        for i in self.ranks_in_lineofsight:
+            new_sd = torch.load(f"{self.sim_path}/node{i}/model.pt").state_dict()
+            for key in local_sd:
+                local_sd[key] += new_sd[key].to(self.device) * cw
+
+        # update server model with aggregated models
+        self.model.train_model.load_state_dict(local_sd)
+        self.model.eval_model.to(self.device)
+        self.model._eval_model_update()
+
+        self.model.eval_model.cpu()
+        self.model.train_model.cpu()
+
+        self.do_training = True
