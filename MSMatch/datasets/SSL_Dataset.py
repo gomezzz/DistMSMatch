@@ -1,14 +1,19 @@
 import torch
 
-from .data_utils import split_ssl_data
 from .BasicDataset import BasicDataset
 from .EurosatRGBDataset import EurosatRGBDataset
+from .EurosatDataset import EurosatDataset
 
 from torchvision import transforms
 
 mean, std = {}, {}
 mean["eurosat_rgb"] = [x / 255 for x in [87.78644464, 96.96653968, 103.99007906]]
 std["eurosat_rgb"] = [x / 255 for x in [51.92045453, 34.82338243, 29.26981551]]
+
+# fmt: off
+mean["eurosat_ms"] = [x / 255 for x in [91.94472713,74.57486138,67.39810048,58.46731632,72.24985416,114.44099918,134.4489474,129.75758655,41.61089189,0.86983654,101.75149263,62.3835689,145.87144681,]]
+std["eurosat_ms"] = [x / 255 for x in [52.42854549,41.13263869,35.29470731,35.12547202,32.75119418,39.77189372,50.80983189,53.91031257,21.51845906,0.54159901,56.63841871,42.25028442,60.01180004,]]
+# fmt: on
 
 
 def get_transform(mean, std, train=True):
@@ -127,8 +132,8 @@ class SSL_Dataset:
         """
         if self.name == "eurosat_rgb":
             dset = EurosatRGBDataset(train=False, node_indx=self.node_indx)
-        # elif self.name == "eurosat_ms":
-        #     dset = EurosatDataset(train=self.train, seed=self.seed)
+        elif self.name == "eurosat_ms":
+            dset = EurosatDataset(train=self.train, seed=self.seed)
         else:
             raise NotImplementedError("Dataset {} is not available".format(self.name))
 
