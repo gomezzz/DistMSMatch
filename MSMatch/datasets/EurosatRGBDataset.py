@@ -19,208 +19,170 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        train,
-        root_dir="./data/EuroSAT_RGB/",
+        root_dir: str,
+        num_labels: int,
+        nodes: int,
+        node_indx: int,
         transform=None,
         seed=42,
-        num_labels=100,
-        nodes=2,
-        alpha=100,
-        node_indx=0,
+        alpha=np.inf,
     ):
         """_summary_
 
         Args:
             train (bool): If true returns training set, else test
-            root_dir (string): Directory with all the images.
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
-            seed (int): seed used for train/test split
-            nodes (int, optional): number of nodes to split data across. Defaults to 1.
-            alpha (_type_, optional): parameter in [0,1] to decide heterogeneity in data partitioning. Heterogeneity increases towards 0. Defaults to None.
+            root_dir (str): path to data
+            num_labels (int): number of labeled samples to include
+            nodes (int): total number of nodes
+            node_indx (int): node index of current node
+            transform (_type_, optional): Defaults to None.
+            seed (int, optional):  Defaults to 42.
+            alpha (_type_, optional): Decides data heterogeneity, value in (0,inf]. Defaults to np.inf (homogeneous partitions).
         """
-        self.seed = seed
-        self.size = [64, 64]
-        self.num_channels = 3
-        self.num_classes = 10
         self.root_dir = root_dir
-        self.transform = transform
-        self.test_ratio = 0.1
-        self.train = train
-        self.N = 27000
-        self.nodes = nodes
-        self.alpha = alpha
-        self.node_indx = node_indx
-        self.data_exist = False
         self.num_labels = num_labels
-        self._load_data()
+        self.nodes = nodes
+        self.node_indx = node_indx
+        self.transform = transform
+        self.seed = seed
+        self.alpha = alpha
 
-    def _load_data(self):
-        """Loads the data from the passed root directory. Splits in test/train based on seed. By default resized to 256,256"""
+        self.size = [64, 64]
 
-        # if data partitioning for the given config exists, use it 
-        data_folder = self._look_for_data()
-
-        # If the data partitioning does not exist:
-        # 1. Load all the data 
-        # 2. Convert label strings to a class index
-        # 3. Create training and test sets
-        # 4. Split training data into labeled and unlabeled parts
-        # 5. Partition the unlabeled part using Latent Dirichlet Allocation into number of nodes
-        # 6. Save partitions to folders
-        if not self.data_exist:
-            # load all images
-            images = np.zeros([self.N, self.size[0], self.size[1], 3], dtype="uint8")
-            labels = []
-            filenames = []
-
-            i = 0
-            # read all the files from the image folder
-            for item in tqdm(os.listdir(self.root_dir)):
-                f = os.path.join(self.root_dir, item)
-                if os.path.isfile(f):
-                    continue
-                for subitem in os.listdir(f):
-                    sub_f = os.path.join(f, subitem)
-                    filenames.append(sub_f)
-                    # a few images are a few pixels off, we will resize them
-                    image = imageio.imread(sub_f)
-                    if image.shape[0] != self.size[0] or image.shape[1] != self.size[1]:
-                        # print("Resizing image...")
-                        image = img_as_ubyte(
-                            resize(
-                                image, (self.size[0], self.size[1]), anti_aliasing=True
-                            )
-                        )
-                    images[i] = img_as_ubyte(image)
-                    i += 1
-                    labels.append(item)
-
-            labels = np.asarray(labels)
-            filenames = np.asarray(filenames)
-
-            # sort by filenames
-            images = images[filenames.argsort()]
-            labels = labels[filenames.argsort()]
-
-            # convert to integer labels
-            le = preprocessing.LabelEncoder()
-            le.fit(np.sort(np.unique(labels)))
-            labels = le.transform(labels)
-            labels = np.asarray(labels)
-            self.label_encoding = list(le.classes_)  # remember label encoding
-
-            # split into a train and test set as provided data is not presplit
-            X_train, X_test, y_train, y_test = train_test_split(
-                images,
-                labels,
-                test_size=self.test_ratio,
-                random_state=self.seed,
-                stratify=labels,
-            )
-
-            # save data configuration
-            data_config = DotMap(_dynamic=False)
-            data_config.test_ratio = self.test_ratio
-            data_config.label_encoding = self.label_encoding
-            data_config.seed = self.seed
-            data_config.datashape = images.shape
-            data_config.num_labels = self.num_labels
-            with open(data_folder + "/data_config.json", "w+") as f:
-                json.dump(data_config, f)
-
-            # divide training data into labeled and unlabeled data
-            lb_data, lb_targets, ulb_data, ulb_targets = split_ssl_data(
-                X_train,
-                y_train,
-                self.num_labels,
-                self.num_classes,
-                index=None,
-                include_lb_to_ulb=False,
-            )
-
-            # Partition unlabeled data between clients, 
-            # returns a list of indices that goes into each partition from ulb data
-            node_dataidx_map = self._partition_data(ulb_targets)
-
-            # save unlabeled training data for each node
-            for node_indx in node_dataidx_map:
-                file_name = data_folder + f"/node_{node_indx}"
-                data_idxs = node_dataidx_map[node_indx]
-                np.save(file_name + "ul-data", ulb_data[data_idxs, :, :, :])
-                np.save(file_name + "ul-targets", ulb_targets[data_idxs])
-            # save labeled data
-            np.save(data_folder + "/lb-data", lb_data)
-            np.save(data_folder + "/lb-targets", lb_targets)
-            # save test data
-            np.save(data_folder + "/test-data", X_test)
-            np.save(data_folder + "/test-targets", y_test)
-
-        # load data from folder
-        if self.train:
-            # Unlabeled data is node specific
-            client_data_folder = data_folder + f"/node_{self.node_indx}"
-            self.ul_data = np.load(client_data_folder + "ul-data.npy")
-            self.ul_targets = np.load(client_data_folder + "ul-targets.npy")  # not used
-
-            self.ul_cls_counts = self._node_cls_count(self.ul_targets)
-            print(
-                f"Node {self.node_indx} unlabeled class distribution:{self.ul_cls_counts}"
-            )
-
-            # Labeled data is the same for all
-            self.lb_data = np.load(data_folder + "/lb-data.npy")
-            self.lb_targets = np.load(data_folder + "/lb-targets.npy")
-            self.lb_cls_counts = self._node_cls_count(self.lb_targets)
-            print(
-                f"Node {self.node_indx} labeled class distribution:{self.lb_cls_counts}"
-            )
+        if "EuroSAT_RGB" in self.root_dir:
+            self.num_channels = 3
+            self.multispectral = False
+        elif "EuroSATallBands" in self.root_dir:
+            self.num_channels = 13
+            self.multispectral = True
         else:
-            self.test_data = np.load(data_folder + "/test-data.npy")
-            self.test_targets = np.load(data_folder + "/test-targets.npy")
-            self.test_cls_counts = self._node_cls_count(self.test_targets)
-            print(
-                f"Node {self.node_indx} test label distribution:{self.test_cls_counts}"
-            )
+            print("root directory not recognized", flush=True)
 
-    def _look_for_data(self):
-        
-        data_folder = None
-        if not self.data_exist:
-            data_dir = (
-                f"./data/alpha_"
-                + str(self.alpha).replace(".", "")
-                + f"-nodes_{self.nodes}"
-            )
-            folder_exists = os.path.exists(data_dir)
-            if folder_exists:
-                for _, dirs, files in os.walk(data_dir):
-                    for subdir in dirs:
-                        cur_folder = data_dir + "/" + subdir
-                        data_config_path = cur_folder + "/data_config.json"
-                        config_exists = os.path.exists(data_config_path)
-                        if config_exists:
-                            f = open(data_config_path)
-                            data_config = json.load(f)
-                            if (
-                                data_config["test_ratio"] == self.test_ratio
-                                and data_config["seed"] == self.seed
-                                and data_config["num_labels"] == self.num_labels
-                            ):
-                                self.label_encoding = data_config["label_encoding"]
-                                self.data_exist = True
-                                data_folder = cur_folder
+        self.num_classes = 10
+        self.test_ratio = 0.1
+        self.N = 27000
 
-        if data_folder is None:
-            data_folder = os.path.join(
-                data_dir, datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            )
-            os.makedirs(data_folder)
+        self.prepare_data()
 
-        return data_folder
+    def _normalize_to_0_to_1(self, img):
+        """Normalizes the passed image to 0 to 1
+
+        Args:
+            img (np.array): image to normalize
+
+        Returns:
+            np.array: normalized image
+        """
+        img = img + np.minimum(0, np.min(img))  # move min to 0
+        img = img / np.max(img)  # scale to 0 to 1
+        return img
+
+    def prepare_data(self):
+        """If the data partitioning does not exist:
+        1. Load all the data from the passed root directory
+        2. Convert label strings to a class index
+        3. Create training and test sets
+        4. Split training data into labeled and unlabeled parts
+        5. Partition the unlabeled part into number of nodes parts
+        6. Save partitions to data_folder
+        The data is by default resized to self.size
+        """
+
+        # load all images
+        images = np.zeros(
+            [self.N, self.size[0], self.size[1], self.num_channels], dtype="uint8"
+        )
+        labels = []
+        filenames = []
+
+        i = 0
+        # read all the files from the image folder
+        for item in tqdm(os.listdir(self.root_dir)):
+            f = os.path.join(self.root_dir, item)
+            if os.path.isfile(f):
+                continue
+            for subitem in os.listdir(f):
+                sub_f = os.path.join(f, subitem)
+                filenames.append(sub_f)
+                # a few images are a few pixels off, we will resize them
+                image = imageio.imread(sub_f)
+                if image.shape[0] != self.size[0] or image.shape[1] != self.size[1]:
+                    # print("Resizing image...")
+                    image = img_as_ubyte(
+                        resize(image, (self.size[0], self.size[1]), anti_aliasing=True)
+                    )
+                if self.multispectral:
+                    images[i] = img_as_ubyte(self._normalize_to_0_to_1(image))
+                else:
+                    images[i] = img_as_ubyte(image)
+                i += 1
+                labels.append(item)
+
+        labels = np.asarray(labels)
+        filenames = np.asarray(filenames)
+
+        # sort by filenames
+        images = images[filenames.argsort()]
+        labels = labels[filenames.argsort()]
+
+        # convert to integer labels
+        le = preprocessing.LabelEncoder()
+        le.fit(np.sort(np.unique(labels)))
+        labels = le.transform(labels)
+        labels = np.asarray(labels)
+        self.label_encoding = list(le.classes_)  # remember label encoding
+
+        # split into a train and test set as provided data is not presplit
+        X_train, X_test, y_train, y_test = train_test_split(
+            images,
+            labels,
+            test_size=self.test_ratio,
+            random_state=self.seed,
+            stratify=labels,
+        )
+
+        # divide training data into labeled and unlabeled data
+        lb_data, lb_targets, ulb_data, ulb_targets = split_ssl_data(
+            X_train,
+            y_train,
+            self.num_labels,
+            self.num_classes,
+            index=None,
+            include_lb_to_ulb=False,
+        )
+
+        # Partition unlabeled data between clients,
+        # returns a list of indices that goes into each partition from ulb data
+        node_dataidx_map = self._partition_data(ulb_targets)
+
+        # save unlabeled training data for each node
+        data_idxs = node_dataidx_map[self.node_indx]
+        self.ul_data = ulb_data[data_idxs, :, :, :]
+        self.ul_targets = ulb_targets[data_idxs]
+
+        # save labeled data
+        self.lb_data = lb_data
+        self.lb_targets = lb_targets
+
+        self.test_data = X_test
+        self.test_targets = y_test
+
+        self.ul_cls_counts = self._node_cls_count(self.ul_targets)
+        self.lb_cls_counts = self._node_cls_count(self.lb_targets)
+        self.test_cls_counts = self._node_cls_count(self.test_targets)
+
+        print(
+            f"Node {self.node_indx} \n"
+            + f"unlabeled class distribution:{self.ul_cls_counts} \n"
+            + f"labeled class distribution:{self.lb_cls_counts} \n"
+            + f"test label distribution:{self.test_cls_counts} \n",
+            flush=True,
+        )
 
     def _partition_data(self, labels):
-        """Partition the dataset over the nodes
+        """Partition the dataset over the nodes.
+        Alpha = np.inf randomly splits the data into partitions whereas
+        alpha in (0,inf) assigns samples using latent dirichlet allocation
 
         Args:
             labels (_type_): labels in the original dataset
@@ -231,7 +193,7 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
         n_labels = labels.shape[0]
         class_num = np.unique(labels)
 
-        if self.alpha is None:
+        if self.alpha == np.inf:
             idxs = np.random.permutation(n_labels)
             node_idxs = np.array_split(idxs, self.nodes)
             node_dataidx_map = {i: node_idxs[i] for i in range(self.nodes)}
@@ -269,11 +231,17 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
 
         return node_dataidx_map
 
-    def _node_cls_count(self, targets):
-        # count the number of data points in each classes for each node
-        unq, unq_cnt = np.unique(targets, return_counts=True)
-        cls_count = {unq[i]: unq_cnt[i] for i in range(len(unq))}
+    def _node_cls_count(self, labels):
+        """Count the number of data points in each classes for each node
 
+        Args:
+            labels (_type_): labels of entire set
+
+        Returns:
+            _type_: count of occurences of each labels
+        """
+        unq, unq_cnt = np.unique(labels, return_counts=True)
+        cls_count = {unq[i]: unq_cnt[i] for i in range(len(unq))}
         return cls_count
 
     def __len__(self):
@@ -287,7 +255,8 @@ class EurosatRGBDataset(torch.utils.data.Dataset):
 
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
-        img = Image.fromarray(img)
+        if not self.multispectral:
+            img = Image.fromarray(img)
 
         if self.transform:
             img = self.transform(img)

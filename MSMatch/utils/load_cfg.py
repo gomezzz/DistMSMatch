@@ -28,7 +28,7 @@ def load_cfg(cfg_path):
                 cfg.bn_momentum = 1.0 - cfg.ema_m
                 dir_name = create_dir_str(cfg)
                 cfg.save_path = os.path.join(cfg.save_dir, dir_name)
-        #print_cfg(cfg)
+        # print_cfg(cfg)
         return cfg
     except:
         raise ValueError('Impossible to find "' + cfg_path + '".')

@@ -27,8 +27,7 @@ class FixMatch:
         device="cpu",
         rank=None,
     ):
-        """
-        class Fixmatch contains setter of data_loader, optimizer, and model update methods.
+        """_summary_
 
         Args:
             net_builder: backbone network class (see get_net_builder in utils)
@@ -41,6 +40,7 @@ class FixMatch:
             hard_label: If True, consistency regularization use a hard pseudo label.
             tb_log: tensorboard writer (see train_utils.py)
             logger: logger (see get_logger.py)
+            rank (_type_, optional): node index. Defaults to None.
         """
         super(FixMatch, self).__init__()
 
@@ -97,23 +97,35 @@ class FixMatch:
             buffer_eval.copy_(buffer_train)
 
     def set_data_loader(self, loader_dict):
+        """Create iterators from dataloaders for training
+
+        Args:
+            loader_dict (_type_): _description_
+        """
         self.loader_dict = loader_dict
         self.print_fn(f"[!] data loader keys: {self.loader_dict.keys()}")
-        self.lb_iterator = iter(
-            self.loader_dict["train_lb"]
-        )  # iterator for labeled data
+        self.lb_iterator = iter(self.loader_dict["train_lb"])
         self.ulb_iterator = iter(self.loader_dict["train_ulb"])
 
     def set_optimizer(self, optimizer, scheduler=None):
+        """Assign optimizer and learning rate scheduling
+
+        Args:
+            optimizer (_type_): optimizer object
+            scheduler (_type_, optional): scheduling object. Defaults to None.
+        """
         self.optimizer = optimizer
         self.scheduler = scheduler
 
     def train_one_batch(self, cfg):
-        """
-        Train function of FixMatch.
-        From data_loader, it inference training data, computes losses, and update the networks.
-        """
+        """Train function of FixMatch for one batch.
 
+        Args:
+            cfg (_type_): config file
+
+        Returns:
+            train_accuracy: accuracy evaluated on test data
+        """
         self.train_model.to(self.device)
         self.eval_model.to(self.device)
         self.train_model.train()
@@ -177,14 +189,18 @@ class FixMatch:
             train_accuracy = accuracy(logits_x_lb, y_lb)
             train_accuracy = train_accuracy[0].cpu()
 
-        # move models away from GPU to free up space
-        self.train_model.cpu()
-        self.eval_model.cpu()
-
         return train_accuracy
 
     @torch.no_grad()
     def evaluate(self, eval_loader=None):
+        """Evaluate the model performance.
+
+        Args:
+            eval_loader (_type_, optional): Arbitrary data set to be used, if none, the test set is used. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         # empty cache (without entering context of current gpu, gpu0 may be initialized)
         with torch.cuda.device(self.device):
             torch.cuda.empty_cache()
@@ -214,69 +230,8 @@ class FixMatch:
 
         if not use_ema:
             eval_model.train()
-        eval_model.cpu()
 
         loss = total_loss.detach().cpu() / total_num
         acc = total_acc.detach().cpu() / total_num
 
         return loss, acc
-
-    def save_run(self, save_name, save_path, cfg=None):
-        save_filename = os.path.join(save_path, save_name)
-
-        # Create subfolder if it does not exist
-        Path(save_path).mkdir(parents=True, exist_ok=True)
-
-        train_model = (
-            self.train_model.module
-            if hasattr(self.train_model, "module")
-            else self.train_model
-        )
-        eval_model = (
-            self.eval_model.module
-            if hasattr(self.eval_model, "module")
-            else self.eval_model
-        )
-        torch.save(
-            {
-                "train_model": train_model.state_dict(),
-                "eval_model": eval_model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-                "scheduler": self.scheduler.state_dict(),
-                # "it": self.it,
-            },
-            save_filename,
-        )
-
-        if cfg is not None:
-            save_cfg(cfg)
-
-        self.print_fn(f"model saved: {save_filename}")
-
-    def load_model(self, load_path):
-        checkpoint = torch.load(load_path)
-
-        train_model = (
-            self.train_model.module
-            if hasattr(self.train_model, "module")
-            else self.train_model
-        )
-        eval_model = (
-            self.eval_model.module
-            if hasattr(self.eval_model, "module")
-            else self.eval_model
-        )
-
-        for key in checkpoint.keys():
-            if hasattr(self, key) and getattr(self, key) is not None:
-                if "train_model" in key:
-                    train_model.load_state_dict(checkpoint[key])
-                elif "eval_model" in key:
-                    eval_model.load_state_dict(checkpoint[key])
-                elif key == "it":
-                    self.it = checkpoint[key]
-                else:
-                    getattr(self, key).load_state_dict(checkpoint[key])
-                self.print_fn(f"Check Point Loading: {key} is LOADED")
-            else:
-                self.print_fn(f"Check Point Loading: {key} is **NOT** LOADED")

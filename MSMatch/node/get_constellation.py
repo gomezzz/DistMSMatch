@@ -12,6 +12,7 @@ def get_constellation(altitude, inclination, nSats, nPlanes, t0, startingW=0):
         nSats (int): Number of sats per plane.
         nPlanes (int): Number of orbital planes.
         t0 (pk.epoch): Initial time.
+        startingW (int, optional): offset for W that is not accumulating (W = longitude of ascending node). Defaults to 0.
     Returns:
         planets,satellites: pykep planets and list of (r,v) of the constellation.
     """

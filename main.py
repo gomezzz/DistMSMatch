@@ -12,7 +12,6 @@ from mpi4py import MPI
 
 
 def main_loop():
-
     # Get MPI object
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()  # get process number of current instance
@@ -20,7 +19,7 @@ def main_loop():
 
     # Load config file
     cfg = mm.load_cfg(cfg_path=None)
-    cfg.save_path = cfg.sim_path + f"/node{rank}"   
+    
     mm.set_seeds(cfg.seed)  # set seed
 
     # make sure that each satellite has a process
@@ -30,26 +29,21 @@ def main_loop():
     # -------------------------------
     # PASEOS setup
     # -------------------------------
-    # Create dataloaders for all nodes
-    node_dls, cfg = mm.create_node_dataloaders(cfg)
-    print(f"HERE rank{rank}", flush=True)
-    # Create coordinate/position for each node
-    altitude = 786 * 1000  # altitude above the Earth's ground [m]
-    inclination = 98.62  # inclination of the orbit
+    node_dls, cfg = mm.load_node_partition(comm, cfg) # load the partition for the current process 
+    
+    cfg.t0 = pk.epoch_from_string(cfg.start_time)  # starting date of our simulation
+    # Obtain the coordinate and position for the current node
     nPlanes = cfg.planes  # the number of orbital planes (see linked wiki article)
     nSats = cfg.nodes // nPlanes  # the number of satellites per orbital plane
-    t0 = pk.epoch_from_string("2023-Dec-17 14:42:42")  # starting date of our simulation
     # Compute orbits of LEO satellites
     planet_list, sats_pos_and_v = mm.get_constellation(
-        altitude, inclination, nSats, nPlanes, t0
+        cfg.constellation_altitude, cfg.constellation_inclination, nSats, nPlanes, cfg.t0
     )
-
+    sats_pos_and_v = sats_pos_and_v[rank]
+    node = mm.SpaceCraftNode(sats_pos_and_v, cfg, node_dls, comm)
+    
     # create parameter server if needed
     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-        node = mm.SpaceCraftNode(
-            sats_pos_and_v[rank], cfg, node_dls[rank], comm, logger
-        )
-        # orbit_duration = planet_list[0].compute_period(t0)
         
         # Get position and velocity for geostationary satellite
         planet_list, sats_pos_and_v = mm.get_constellation(
@@ -57,7 +51,7 @@ def main_loop():
             inclination=0,
             nSats=1,
             nPlanes=1,
-            t0=t0,
+            t0=cfg.t0,
             startingW=31,
         )
         # create server node
@@ -66,29 +60,24 @@ def main_loop():
         # For FL, the server operates on rank = 0
         if rank == 0:
             os.makedirs(cfg.sim_path)
-            server_node.broadcast_global_model()
+            server_node.broadcast_global_model() # save the global model
             
         comm.Barrier()  # make sure all nodes wait for the global model to be stored
-        node.set_server_node(server_node) # make each know about the server
+        node.set_server_node(server_node) # make the node know about the server
         node.get_global_model()  # load the global model into the node
 
     else:
-        os.makedirs(cfg.save_path)
-        # Create spacecraft node
-        node = mm.SpaceCraftNode(
-            sats_pos_and_v[rank], cfg, node_dls[rank], comm, logger
-        )
         server_node = None
 
     # ------------------------------------
     # Enter main loop
     # ------------------------------------
     time_in_standby = 0 # how long has the node been in standby
-    time_since_last_update = 0 # how long ago since last model received
-    time_per_batch = 16 # time duration to train a single batch
-    time_for_comms = node.comm_duration # duration to share a model 
-    standby_period = 1e3  # how long to standby if necessary
-    model_update_countdown = -1 # this is a counter used to remain in "Model update" 
+    time_since_last_update = 0 # how long ago since the local model was updated
+    time_per_batch = 16 # time duration to train a single batch [s]
+    time_for_comms = node.comm_duration # time required to share a model [s]
+    standby_period = 1e3  # how long to standby if necessary [s]
+    time_until_comms_complete = 0 # keep track of the time until communications are complete
     
     # Allocate for storing results
     test_losses = []
@@ -96,7 +85,7 @@ def main_loop():
     train_accuracy = []
     local_time_at_train = []
     local_time_at_test = []
-    communication_times = []
+    communication_started_times = []
     communication_over_times = []
     
     verbose = False # Print what is going on
@@ -114,11 +103,8 @@ def main_loop():
             
         sim_time = node.paseos._state.time # keep track of simulation time
 
-        # if the model countdown is positive, we are still communicating and should remain in model update
-        if model_update_countdown > 0:
-            activity = "Model_update"
-            power_consumption = 10
-        else:
+        # if the model countdown is positive, we are still communicating and should not update the activity/power consumption
+        if time_until_comms_complete == 0:
             # Find out what kind of activity to perform
             activity, power_consumption, time_in_standby = node.decide_on_activity(
                 time_per_batch,
@@ -129,9 +115,7 @@ def main_loop():
 
             comm.Barrier()  # sync all models in time
             if cfg.mode == "Swarm":
-                node.exchange_actors(
-                    verbose=False
-                )  # Find out what actors can be seen and what the other actors are doing
+                mm.exchange_actors(node)  # Find out what actors can be seen and what the other actors are doing
             else:
                 node.check_if_sever_available()  # check if server is visible and add to known actors
                 if node.rank == 0:
@@ -139,8 +123,8 @@ def main_loop():
 
         # run the current activity (Model update, training, or standby)
         if activity == "Model_update":
-            # if counter is not counting down
-            if model_update_countdown == -1:
+            
+            if time_until_comms_complete == 0:
                 if verbose == True:
                     print(
                         f"Node{rank} will update with {node.paseos.known_actor_names} at {sim_time}",
@@ -148,27 +132,18 @@ def main_loop():
                     )
 
                 # initiate communications
-                communication_times.append(sim_time) # store time for communication
-                model_update_countdown = (
-                    2 * time_for_comms // time_per_batch
-                )  # transmit to two neighbors (swarm) or uplink/downlink (FL)
+                communication_started_times.append(sim_time) # store time for communication start
+                time_until_comms_complete = 2 * time_for_comms # transmit to two neighbors in sequence (swarm) or uplink/downlink (FL)
  
             else:
-                model_update_countdown -= 1 # decrease counter
-                # the communications is over
-                if model_update_countdown < 0:
+                time_until_comms_complete -= time_per_batch # decrease time
+                # check if communications is over
+                if time_until_comms_complete < 0:
                     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-                        model_loaded = (
-                            node.get_global_model()
-                        )  # get current global model
-                        if model_loaded:
-                            time_since_last_update = 0
-                        else:
-                            # make sure to get back in here next iteration because something went wrong loading
-                            model_update_countdown += 1
+                        node.get_global_model()  # get current global model
                     else:
-                        node.aggregate() # aggregate received models (loaded from folders)
-                        time_since_last_update = 0
+                        node.aggregate_neighbors() # aggregate received models (loaded from folders)
+                    time_since_last_update = 0
                     loss, acc = node.evaluate() # evaluate updated model
                     
                     # Store values
@@ -182,23 +157,24 @@ def main_loop():
                         flush=True,
                     )
                 # the client model reached the server node (FL)
-                elif model_update_countdown == time_for_comms // time_per_batch + 1:
+                elif time_until_comms_complete < time_for_comms:
                     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-                        node.save_model()  # "communicate" the local model to the server by storing it to a folder
+                        node.save_model(f"node{rank}_model")  # "communicate" the local model to the server by storing it to a folder
 
             # increase time for communication
-            node.perform_activity(activity, power_consumption, time_per_batch)
+            node.perform_activity(power_consumption, time_per_batch)
 
         elif activity == "Training":
             # record activity in paseos
-            node.perform_activity(activity, power_consumption, time_per_batch)
+            constrains_ok = node.perform_activity(power_consumption, time_per_batch)
             time_since_last_update += time_per_batch
 
-            # perform training for one iteration only
-            train_acc = node.train_one_batch()
-            train_accuracy.append(train_acc)
-            local_time_at_train.append(sim_time)
-            batch_idx += 1
+            if constrains_ok:
+                # perform training for one iteration only
+                train_acc = node.train_one_batch()
+                train_accuracy.append(train_acc)
+                local_time_at_train.append(sim_time)
+                batch_idx += 1
 
             # evaluate the model and store results
             if batch_idx % 50 == 0 or batch_idx == 0:
@@ -216,17 +192,18 @@ def main_loop():
                     )
 
                 if cfg.mode == "Swarm":
-                    node.save_model()  # save model to folder
+                    node.save_model(f"node{rank}_model")  # save model to folder
         else:
             # Standby
-            node.perform_activity(activity, power_consumption, time_per_batch)
+            node.perform_activity(power_consumption, time_per_batch)
         
         # increase time since the server node updated global model
         if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-            server_node.update_time_since_update(time_per_batch)
+            server_node.time_since_last_global_update += time_per_batch
 
     # -------------------------------------------------
     # Save things to become a happy camper
+    cfg.save_path = cfg.sim_path + f"/node{rank}"   
     np.savetxt(f"{cfg.save_path}/test_loss.csv", np.array(test_losses), delimiter=",")
     np.savetxt(f"{cfg.save_path}/test_acc.csv", np.array(test_accuracy), delimiter=",")
     np.savetxt(
@@ -239,7 +216,7 @@ def main_loop():
         f"{cfg.save_path}/train_time.csv", np.array(local_time_at_train), delimiter=","
     )
     np.savetxt(
-        f"{cfg.save_path}/comm_time.csv", np.array(communication_times), delimiter=","
+        f"{cfg.save_path}/comm_time.csv", np.array(communication_started_times), delimiter=","
     )
     np.savetxt(
         f"{cfg.save_path}/post_comm_time.csv",

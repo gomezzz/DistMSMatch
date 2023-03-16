@@ -2,7 +2,6 @@ import torch
 
 from .BasicDataset import BasicDataset
 from .EurosatRGBDataset import EurosatRGBDataset
-from .EurosatDataset import EurosatDataset
 
 from torchvision import transforms
 
@@ -70,105 +69,62 @@ class SSL_Dataset:
     def __init__(
         self,
         name="eurosat_rgb",
-        train=True,
         data_dir="./data",
+        num_labels=100,
         seed=42,
         alpha=100,
         nodes=1,
-        node_indx=1,
+        node_indx=0,
     ):
-        """
-        Args
-            name: name of dataset
-            train: True means the dataset is training dataset (default=True)
-            data_dir: path of directory, where data is downloaed or stored.
-            seed: seed to use for the train / test split. Not available for cifar which is presplit
+        """Setup for creating datasets
+
+        Args:
+            name (str, optional): name of dataset. Defaults to "eurosat_rgb".
+            data_dir (str, optional): path of directory, where data is downloaed or stored.. Defaults to "./data".
+            num_labels (int, optional): Number of labels to use. Defaults to 100.
+            seed (int, optional): seed to use for the train / test split. Defaults to 42.
+            alpha (int, optional): Data heterogeneity parameter in (0,inf]). The smaller the more heterogeneous partitions. Defaults to 100.
+            nodes (int, optional): Number of nodes to partition among. Defaults to 1.
+            node_indx (int, optional): Node index of calling process. Defaults to 0.
         """
 
         self.name = name
         self.seed = seed
-        self.train = train
         self.data_dir = data_dir
-        self.transform = get_transform(mean[name], std[name], train)
+        self.num_labels = num_labels
+        self.train_transform = get_transform(mean[name], std[name], train=True)
+        self.test_transform = get_transform(mean[name], std[name], train=False)
         self.inv_transform = get_inverse_transform(mean[name], std[name])
         self.alpha = alpha
         self.nodes = nodes
         self.node_indx = node_indx
 
-        self.use_ms_augmentations = False
         # need to use different augmentations for multispectral
-        if self.name == "eurosat_ms":
-            self.use_ms_augmentations = True
-
-    def get_data(self, num_labels):
-        """
-        get_data returns data (images) and targets (labels)
-        """
         if self.name == "eurosat_rgb":
-            dset = EurosatRGBDataset(
-                train=self.train,
-                seed=self.seed,
-                num_labels=num_labels,
-                alpha=self.alpha,
-                nodes=self.nodes,
-                node_indx=self.node_indx,
-            )
-        # elif self.name == "eurosat_ms":
-        #     dset = EurosatDataset(train=self.train, seed=self.seed)
-        else:
-            raise NotImplementedError("Dataset {} is not available".format(self.name))
-
-        self.label_encoding = dset.label_encoding
-        self.num_classes = dset.num_classes
-        self.num_channels = dset.num_channels
-
-        lb_data, lb_targets = dset.lb_data, dset.lb_targets
-        ulb_data, ulb_targets = dset.ul_data, dset.ul_targets
-        return lb_data, lb_targets, ulb_data, ulb_targets
-
-    def get_test_data(self):
-        """
-        get_data returns data (images) and targets (labels)
-        """
-        if self.name == "eurosat_rgb":
-            dset = EurosatRGBDataset(train=False, node_indx=self.node_indx)
+            self.use_ms_augmentations = False
+            self.root_dir = "./data/EuroSAT_RGB/"
         elif self.name == "eurosat_ms":
-            dset = EurosatDataset(train=self.train, seed=self.seed)
+            self.use_ms_augmentations = True
+            self.root_dir = "./data/EuroSATallBands/"
         else:
-            raise NotImplementedError("Dataset {} is not available".format(self.name))
+            print("Dataset not recognized", flush=True)
+            return
 
-        self.label_encoding = dset.label_encoding
-        self.num_classes = dset.num_classes
-        self.num_channels = dset.num_channels
-
-        return dset.test_data, dset.test_targets
-
-    def get_dset(self, use_strong_transform=False, strong_transform=None, onehot=False):
-        """
-        get_dset returns class BasicDataset, containing the returns of get_data.
-
-        Args
-            use_strong_tranform: If True, returned dataset generates a pair of weak and strong augmented images.
-            strong_transform: list of strong_transform (augmentation) if use_strong_transform is True
-            onehot: If True, the label is not integer, but one-hot vector.
-        """
-
-        data, targets = self.get_test_data()
-
-        return BasicDataset(
-            data,
-            targets,
-            self.num_classes,
-            self.transform,
-            use_strong_transform,
-            strong_transform,
-            onehot,
-            self.use_ms_augmentations,
+    def create_node_partitions(self):
+        """Prepare the data partitioning for the nodes. Should only be called from root process."""
+        # Create EuroSat dataset object and check/add folder for partitions
+        dset = EurosatRGBDataset(
+            seed=self.seed,
+            root_dir=self.root_dir,
+            num_labels=self.num_labels,
+            alpha=self.alpha,
+            nodes=self.nodes,
+            node_indx=self.node_indx,
         )
+        dset.prepare_data()  # Create partitions
 
     def get_ssl_dset(
         self,
-        num_labels,
         use_strong_transform=True,
         strong_transform=None,
         onehot=False,
@@ -187,16 +143,33 @@ class SSL_Dataset:
             oenhot: If True, the target is converted into onehot vector.
 
         Returns:
-            BasicDataset (for labeled data), BasicDataset (for unlabeld data)
+            BasicDataset (for labeled data), BasicDataset (for unlabeld data), BasicDataset (for test data)
         """
+        # Create the eurosat object
+        if self.name == "eurosat_rgb" or self.name == "eurosat_ms":
+            eurosat_dset = EurosatRGBDataset(
+                seed=self.seed,
+                root_dir=self.root_dir,
+                num_labels=self.num_labels,
+                alpha=self.alpha,
+                nodes=self.nodes,
+                node_indx=self.node_indx,
+            )
+        else:
+            raise NotImplementedError("Dataset {} is not available".format(self.name))
 
-        lb_data, lb_targets, ulb_data, ulb_targets = self.get_data(num_labels)
+        # Prepare training data
+        self.num_classes = eurosat_dset.num_classes
+        self.num_channels = eurosat_dset.num_channels
+
+        lb_data, lb_targets = eurosat_dset.lb_data, eurosat_dset.lb_targets
+        ulb_data, ulb_targets = eurosat_dset.ul_data, eurosat_dset.ul_targets
 
         lb_dset = BasicDataset(
             lb_data,
             lb_targets,
             self.num_classes,
-            self.transform,
+            self.train_transform,
             use_strong_transform=False,
             strong_transform=None,
             onehot=onehot,
@@ -207,11 +180,25 @@ class SSL_Dataset:
             ulb_data,
             ulb_targets,
             self.num_classes,
-            self.transform,
+            self.train_transform,
             use_strong_transform,
             strong_transform,
             onehot,
             self.use_ms_augmentations,
         )
 
-        return lb_dset, ulb_dset
+        # Prepare test data
+        test_data = eurosat_dset.test_data
+        test_targets = eurosat_dset.test_targets
+        test_dset = BasicDataset(
+            test_data,
+            test_targets,
+            self.num_classes,
+            self.test_transform,
+            use_strong_transform=False,
+            strong_transform=None,
+            onehot=False,
+            use_ms_augmentations=self.use_ms_augmentations,
+        )
+
+        return lb_dset, ulb_dset, test_dset

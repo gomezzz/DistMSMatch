@@ -6,47 +6,68 @@ from ..models.fixmatch.FixMatch import FixMatch
 
 
 class BaseNode:
-    def __init__(self, rank, cfg=None, dataloader=None, logger=None):
-        self.cfg = cfg
+    """Class to form the foundation of ServerNode and SpacecraftNode by initializing the neural networks to be trained."""
+
+    def __init__(self, rank, cfg, dataloader=None, is_server=False):
         self.rank = rank
-        self.logger = logger
-        self.save_path = cfg.save_path
-        self.sim_path = cfg.sim_path
         self.accuracy = []
         
-        # Servernode will not have a rank
-        if rank is not None:
+        # Read out parameters from cfg
+        self.save_path = cfg.save_path
+        self.sim_path = cfg.sim_path
+        self.scale = cfg.scale
+        self.num_classes = cfg.num_classes
+        self.num_channels = cfg.num_channels
+        self.ema_m = cfg.ema_m
+        self.T = cfg.T
+        self.p_cutoff = cfg.p_cutoff
+        self.ulb_loss_ratio = cfg.ulb_loss_ratio
+        self.pretrained = cfg.pretrained
+        self.opt = cfg.opt
+        self.lr = cfg.lr
+        self.momentum = cfg.momentum
+        self.weight_decay = cfg.weight_decay
+        self.num_train_iter = cfg.num_train_iter
+        self.net = cfg.net
+        self.mode = cfg.mode
+
+        # server nodes are treated differently as no training is needed
+        if is_server:
+            self.device = "cpu"  
+            self.model = self._create_model() # Create model
+        else:
             self.device = (
                 "cuda:{}".format(self.rank % torch.cuda.device_count())
                 if torch.cuda.is_available()
                 else "cpu"
             )
-        else:
-            self.device = "cpu"
-            
-        # Create model
-        self.model = self._create_model()
-        self.n_gpus = torch.cuda.device_count()
-        
-        if rank is not None:
-            self.model.set_data_loader(dataloader)
+            self.model = self._create_model() # Create model
+            self.n_gpus = torch.cuda.device_count()
+
+            self.model.set_data_loader(dataloader)  # create data iterators for training
 
     def _create_model(self):
+        """Create the models to be trained. Two equal models are created, one for training 
+        and one for testing where the latter is updated from the trained model via exponential averaging.
+
+        Returns:
+            _type_: _description_
+        """
         net_builder = get_net_builder(
-            self.cfg.net,
-            pretrained=self.cfg.pretrained,
-            in_channels=self.cfg.num_channels,
-            scale=self.cfg.scale,
+            self.net,
+            pretrained=self.pretrained,
+            in_channels=self.num_channels,
+            scale=self.scale,
         )
 
         model = FixMatch(
             net_builder,
-            self.cfg.num_classes,
-            self.cfg.num_channels,
-            self.cfg.ema_m,
-            T=self.cfg.T,
-            p_cutoff=self.cfg.p_cutoff,
-            lambda_u=self.cfg.ulb_loss_ratio,
+            self.num_classes,
+            self.num_channels,
+            self.ema_m,
+            T=self.T,
+            p_cutoff=self.p_cutoff,
+            lambda_u=self.ulb_loss_ratio,
             hard_label=True,
             device=self.device,
             rank=self.rank,
@@ -55,27 +76,24 @@ class BaseNode:
         # get optimizer, ADAM and SGD are supported.
         optimizer = get_optimizer(
             model.train_model,
-            self.cfg.opt,
-            self.cfg.lr,
-            self.cfg.momentum,
-            self.cfg.weight_decay,
+            self.opt,
+            self.lr,
+            self.momentum,
+            self.weight_decay,
         )
         # We use a learning rate schedule to control the learning rate during training.
         scheduler = get_cosine_schedule_with_warmup(
             optimizer,
-            self.cfg.num_train_iter,
-            num_warmup_steps=self.cfg.num_train_iter * 0,
+            self.num_train_iter,
+            num_warmup_steps=self.num_train_iter * 0,
         )
         model.set_optimizer(optimizer, scheduler)
 
         return model
 
-    def save_model(self):
-        if self.cfg.mode == "Swarm":
-            torch.save(
-                self.model.train_model, f"{self.save_path}/model.pt"
-            )  # save trained model
-        else:
-            torch.save(
-                self.model.train_model, f"{self.sim_path}/node{self.rank}_model.pt"
-            )  # save trained model
+    def save_model(self,name):
+        """Save the training model to folder
+        """        
+        torch.save(
+            self.model.train_model, f"{self.sim_path}/{name}.pt"
+        )  # save trained model
