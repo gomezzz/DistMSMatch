@@ -1,7 +1,7 @@
 import pykep as pk
 from paseos import ActorBuilder, SpacecraftActor
 
-def parse_actor_data(self, actor_data):
+def parse_actor_data(actor_data):
     """Decode an actor from a data list
 
     Args:
@@ -85,3 +85,4 @@ def exchange_actors(node, verbose=False):
 # ToDo: put server on separate MPI process and let nodes announce to server that model has been updated
 # ToDo: Also, remove the IO from server class
 def announce_update(node):
+    pass

@@ -28,7 +28,7 @@ def load_node_partition(comm, cfg):
     # load all the datasets for the given node
     lb_dset, ulb_dset, eval_dset = dset.get_ssl_dset(cfg.num_labels)
     cfg.num_channels = dset.num_channels
-    cfg.num_classes = dset.num_channels
+    cfg.num_classes = dset.num_classes
 
     loader_dict = {}
     dset_dict = {"train_lb": lb_dset, "train_ulb": ulb_dset, "eval": eval_dset}
@@ -56,4 +56,4 @@ def load_node_partition(comm, cfg):
         dset_dict["eval"], cfg.eval_batch_size, num_workers=1
     )
 
-    return loader_dict
+    return loader_dict, cfg

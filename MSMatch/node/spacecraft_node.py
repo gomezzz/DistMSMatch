@@ -177,7 +177,7 @@ class SpaceCraftNode(BaseNode):
             and self.local_actor.temperature_in_K < constants.COMM_MAX_TEMP
         ):
             self.local_actor._current_activity = "Model_update"
-            if self.cfg.mode == "Swarm":
+            if self.mode == "Swarm":
                 return "Model_update", constants.SWARM_COMM_PWR, 0
             else:
                 return "Model_update", constants.FL_GS_COMM_PWR, 0
@@ -220,7 +220,7 @@ class SpaceCraftNode(BaseNode):
         Returns:
             train_acc: test accuracy
         """        
-        train_acc = self.model.train_one_batch(self.cfg)
+        train_acc = self.model.train_one_batch()
         return train_acc.cpu().numpy()
 
     def evaluate(self):
@@ -263,12 +263,13 @@ class SpaceCraftNode(BaseNode):
             local_sd[key] = weight * local_sd[key]
 
         for i in self.ranks_in_lineofsight:
-            new_sd = torch.load(f"{self.sim_path}/node{i}_model.pt").state_dict()
+            new_sd = torch.load(f"{self.sim_path}/node{i}_model.pt").to("cpu").state_dict()
             for key in local_sd:
                 local_sd[key] += new_sd[key] * weight
 
         # update training model with aggregated model
         self.model.train_model.load_state_dict(local_sd)
+        self.model.train_model.to(self.device)
         self.model.eval_model.to(self.device)
         self.model._eval_model_update()
 

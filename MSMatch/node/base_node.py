@@ -13,7 +13,6 @@ class BaseNode:
         self.accuracy = []
         
         # Read out parameters from cfg
-        self.save_path = cfg.save_path
         self.sim_path = cfg.sim_path
         self.scale = cfg.scale
         self.num_classes = cfg.num_classes

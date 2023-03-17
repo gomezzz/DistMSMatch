@@ -21,6 +21,7 @@ dependencies:
 - toml
 - papermill
 - matplotlib
+- imgaug
 - jupyter
 - pip
 - pip:

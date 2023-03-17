@@ -69,6 +69,9 @@ def main_loop():
     else:
         server_node = None
 
+    if not os.path.exists(cfg.sim_path):
+        os.makedirs(cfg.sim_path)
+    
     # ------------------------------------
     # Enter main loop
     # ------------------------------------
@@ -88,7 +91,7 @@ def main_loop():
     communication_started_times = []
     communication_over_times = []
     
-    verbose = False # Print what is going on
+    verbose = True # Print what is going on
 
     total_time = 15 * 24 * 3600  # total simulation time
     batch_idx = 0  # starting batch index
@@ -139,6 +142,7 @@ def main_loop():
                 time_until_comms_complete -= time_per_batch # decrease time
                 # check if communications is over
                 if time_until_comms_complete < 0:
+                    time_until_comms_complete = 0
                     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
                         node.get_global_model()  # get current global model
                     else:
@@ -166,10 +170,10 @@ def main_loop():
 
         elif activity == "Training":
             # record activity in paseos
-            constrains_ok = node.perform_activity(power_consumption, time_per_batch)
+            constraints_violated = node.perform_activity(power_consumption, time_per_batch)
             time_since_last_update += time_per_batch
 
-            if constrains_ok:
+            if not constraints_violated:
                 # perform training for one iteration only
                 train_acc = node.train_one_batch()
                 train_accuracy.append(train_acc)

@@ -11,7 +11,7 @@ def get_default_cfg():
         DotMap: the default configuration
     """
     cfg = DotMap(_dynamic=False)
-    cfg.dataset = "eurosat_rgb"  # "eurosat_ms" # "eurosat_rgb"
+    cfg.dataset = "eurosat_ms"  # "eurosat_ms" # "eurosat_rgb"
     cfg.net = "efficientnet-lite0"
     cfg.batch_size = 32
     cfg.p_cutoff = 0.95
@@ -33,9 +33,9 @@ def get_default_cfg():
     cfg.hard_label = True
     cfg.scale = 1
     cfg.alpha = 100
-    cfg.nodes = 8
+    cfg.nodes = 4
     cfg.planes = 1
-    cfg.mode = "FL_ground"  # "FL_ground", "FL_geostat", "Swarm"
+    cfg.mode = "Swarm"  # "FL_ground", "FL_geostat", "Swarm"
 
     # PASEOS specific configuration
     cfg.start_time = "2023-Dec-17 14:42:42"

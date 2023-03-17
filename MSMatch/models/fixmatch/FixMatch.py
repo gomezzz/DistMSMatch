@@ -1,14 +1,9 @@
 import torch
 import torch.nn.functional as F
 
-import os
-import sys
-from pathlib import Path
-
 from ...utils.consistency_loss import consistency_loss
 from ...utils.cross_entropy_loss import cross_entropy_loss
 from ...utils.accurarcy import accuracy
-from ...utils.save_cfg import save_cfg
 
 
 class FixMatch:
@@ -117,11 +112,8 @@ class FixMatch:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-    def train_one_batch(self, cfg):
+    def train_one_batch(self):
         """Train function of FixMatch for one batch.
-
-        Args:
-            cfg (_type_): config file
 
         Returns:
             train_accuracy: accuracy evaluated on test data
@@ -174,7 +166,7 @@ class FixMatch:
             "ce",
             self.T,
             self.p_cutoff,
-            use_hard_labels=cfg.hard_label,
+            use_hard_labels=self.use_hard_label
         )
         total_loss = sup_loss + self.lambda_u * unsup_loss
 
