@@ -149,7 +149,7 @@ class SpaceCraftNode(BaseNode):
                 model_loaded = True
                 return model_loaded
             except:
-                print(f"Node{self.rank} failed loading global model, trying again", Flush=True)
+                print(f"Node{self.rank} failed loading global model, trying again", flush=True)
                 update_attempts -= 1
 
         return model_loaded

@@ -42,6 +42,10 @@ def main_loop():
     sats_pos_and_v = sats_pos_and_v[rank]
     node = mm.SpaceCraftNode(sats_pos_and_v, cfg, node_dls, comm)
     
+    # For FL, the server operates on rank = 0
+    if rank == 0:
+        os.makedirs(cfg.sim_path)
+            
     # create parameter server if needed
     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
         
@@ -54,14 +58,13 @@ def main_loop():
             t0=cfg.t0,
             startingW=31,
         )
-        # create server node
+
+        # create server node and save a global model
         server_node = mm.ServerNode(cfg, list(range(size)), sats_pos_and_v)
-        
-        # For FL, the server operates on rank = 0
+
         if rank == 0:
-            os.makedirs(cfg.sim_path)
-            server_node.broadcast_global_model() # save the global model
-            
+            server_node.save_global_model()
+        
         comm.Barrier()  # make sure all nodes wait for the global model to be stored
         node.set_server_node(server_node) # make the node know about the server
         node.get_global_model()  # load the global model into the node
@@ -69,9 +72,6 @@ def main_loop():
     else:
         server_node = None
 
-    if not os.path.exists(cfg.sim_path):
-        os.makedirs(cfg.sim_path)
-    
     # ------------------------------------
     # Enter main loop
     # ------------------------------------
@@ -81,6 +81,7 @@ def main_loop():
     time_for_comms = node.comm_duration # time required to share a model [s]
     standby_period = 1e3  # how long to standby if necessary [s]
     time_until_comms_complete = 0 # keep track of the time until communications are complete
+    model_shared = False
     
     # Allocate for storing results
     test_losses = []
@@ -116,14 +117,17 @@ def main_loop():
                 time_since_last_update,
             )
 
-            comm.Barrier()  # sync all models in time
-            if cfg.mode == "Swarm":
-                mm.exchange_actors(node)  # Find out what actors can be seen and what the other actors are doing
-            else:
-                node.check_if_sever_available()  # check if server is visible and add to known actors
-                if node.rank == 0:
-                    server_node.update_global_model() # attempt to update global model (only if buffer contains > 2 unique models)
-
+        if cfg.mode == "Swarm":
+            mm.exchange_actors(node)  # Find out what actors can be seen and what the other actors are doing
+        else:
+            node.check_if_sever_available()  # check if server is visible and add to known actors
+            if node.rank == 0:
+                server_node.update_global_model() # update global model by aggregating the shared models
+            mm.announce_model_shared(node, model_shared) # tell server that a new model is available
+            model_shared = False 
+            
+        comm.Barrier()  # sync all processes in time
+        
         # run the current activity (Model update, training, or standby)
         if activity == "Model_update":
             
@@ -161,9 +165,10 @@ def main_loop():
                         flush=True,
                     )
                 # the client model reached the server node (FL)
-                elif time_until_comms_complete < time_for_comms:
+                elif (time_for_comms - time_per_batch) < time_until_comms_complete < time_for_comms:
                     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
                         node.save_model(f"node{rank}_model")  # "communicate" the local model to the server by storing it to a folder
+                        model_shared = True
 
             # increase time for communication
             node.perform_activity(power_consumption, time_per_batch)
@@ -200,10 +205,6 @@ def main_loop():
         else:
             # Standby
             node.perform_activity(power_consumption, time_per_batch)
-        
-        # increase time since the server node updated global model
-        if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-            server_node.time_since_last_global_update += time_per_batch
 
     # -------------------------------------------------
     # Save things to become a happy camper

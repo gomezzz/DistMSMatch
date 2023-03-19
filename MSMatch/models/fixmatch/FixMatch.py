@@ -73,12 +73,15 @@ class FixMatch:
         """
         Momentum update of evaluation model (exponential moving average)
         """
-
+        self.train_model.to(self.device)
+        self.eval_model.to(self.device)
+        
         train_model_params = (
             self.train_model.module.parameters()
             if hasattr(self.train_model, "module")
             else self.train_model.parameters()
         )
+        
         for param_train, param_eval in zip(
             train_model_params, self.eval_model.parameters()
         ):

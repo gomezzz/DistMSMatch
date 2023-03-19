@@ -6,14 +6,21 @@ import os
 
 
 class ServerNode(BaseNode):
-    """Class for the server orchestrating the federation.
+    """Class for the server orchestrating the federation. 
+    The server is handled by the process with rank = 0.
 
     Args:
         BaseNode (_type_): Class initializing the neural networks.
     """    
     def __init__(self, cfg, node_ranks, sats_pos_and_v=None):
+        """
+        Args:
+            cfg: parameters to create neural network
+            node_ranks (list): rank number of all the nodes
+            sats_pos_and_v (list): position and velocity of geosat
+        """
         super(ServerNode, self).__init__(
-            rank=None, cfg=cfg, dataloader=None, logger=None, is_server=True
+            rank=None, cfg=cfg, dataloader=None, is_server=True
         )
 
         # There may be more than one parameter server
@@ -52,51 +59,40 @@ class ServerNode(BaseNode):
             self.actors.append(geosat)
 
         self.node_ranks = node_ranks
-        self.local_updates_incomplete = node_ranks
-        self.time_since_last_global_update = 0
-
-    def broadcast_global_model(self):
-        """Broadcast is done by saving a global model.
-        """        
-        self.save_model(self.model.train_model, "global_model.pt")  
+        self.models_shared = [False for i in range(len(node_ranks))]
+        
+        self.model.train_model.to(self.device)
+    
+    def save_global_model(self):
+        self.save_model("global_model")
 
     def update_global_model(self):
-        """Updated the global model with models received. Note that at least 3 models must be received to trigger the update.
+        """Updated the global model with models received by averaging weights and then save the new model to folder.
         """        
-        if self.time_since_last_global_update > 1e3:
-            f = []
-            for (dirpath, dirnames, filenames) in os.walk(self.sim_path):
-                f.extend(filenames)
-                break
-
-            local_model_paths = []
-            for filename in f:
-                if "node" in filename:
-                    local_model_paths.append(filename)
-
-            n_models = len(local_model_paths)
+        n_models = sum(self.models_shared)
+        if n_models > 0:
             # make sure that we have at least 3 models to aggregate
-            if n_models > 2:
-                local_sd = self.model.train_model.state_dict()
-                weight = 1 / (n_models)
+            local_sd = self.model.train_model.state_dict()
+            weight = 1 / (n_models+1)
 
-                local_models = []
-                for filename in local_model_paths:
-                    print(f"Updating global model with {filename}", flush=True)
-                    path = f"{self.sim_path}/{filename}"
+            # get the local models that have been shared
+            local_models = []
+            for rank, model_shared in enumerate(self.models_shared):
+                
+                if model_shared:
+                    print(f"Updating global model with node{rank}", flush=True)
+                    path = f"{self.sim_path}/node{rank}_model.pt"
                     try:
-                        local_models.append(torch.load(path).state_dict())
-                        os.remove(path)
+                        local_models.append(torch.load(path).to(self.device).state_dict())
+                        self.models_shared[rank] = False
                     except:
-                        print("Load not successful", flush=True)
+                        print(f"node{rank} not successfully loaded", flush=True)
+                        return
+            
+            # aggregate local models with global model
+            for key in local_sd:
+                local_sd[key] = weight * local_sd[key] + sum([sd[key] * weight for sd in local_models])
 
-                for key in local_sd:
-                    local_sd[key] = sum([sd[key] * weight for sd in local_models])
-
-                self.time_since_last_global_update = 0
-
-                # update server model with aggregated models
-                self.model.train_model.load_state_dict(local_sd)
-                torch.save(
-                    self.model.train_model, f"{self.sim_path}/global_model.pt"
-                )  # save trained model
+            # update server model with aggregated models
+            self.model.train_model.load_state_dict(local_sd)
+            self.save_global_model()  
