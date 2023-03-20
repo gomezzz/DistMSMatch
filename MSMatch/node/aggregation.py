@@ -2,13 +2,12 @@ import torch
 
 def aggregate_models(local_sd, weight, paths):
     """Aggregate models with a reference model
-
+    
     Args:
         local_sd (dict): reference model
         weight (float): weight for weighted average
         paths (list): list of paths to the models to me aggregated
     """
-    
     # Load the models
     local_models = []
     for path in paths:
