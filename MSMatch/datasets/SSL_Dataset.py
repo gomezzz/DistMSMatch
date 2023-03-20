@@ -1,7 +1,7 @@
 import torch
 
 from .BasicDataset import BasicDataset
-from .EurosatRGBDataset import EurosatRGBDataset
+from .EurosatDataset import EurosatDataset
 
 from torchvision import transforms
 
@@ -113,7 +113,7 @@ class SSL_Dataset:
     def create_node_partitions(self):
         """Prepare the data partitioning for the nodes. Should only be called from root process."""
         # Create EuroSat dataset object and check/add folder for partitions
-        dset = EurosatRGBDataset(
+        dset = EurosatDataset(
             seed=self.seed,
             root_dir=self.root_dir,
             num_labels=self.num_labels,
@@ -147,7 +147,7 @@ class SSL_Dataset:
         """
         # Create the eurosat object
         if self.name == "eurosat_rgb" or self.name == "eurosat_ms":
-            eurosat_dset = EurosatRGBDataset(
+            eurosat_dset = EurosatDataset(
                 seed=self.seed,
                 root_dir=self.root_dir,
                 num_labels=self.num_labels,

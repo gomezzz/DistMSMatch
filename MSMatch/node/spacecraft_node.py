@@ -2,6 +2,7 @@ import pykep as pk
 import paseos
 from .base_node import BaseNode
 from . import constants
+from .aggregation import aggregate_models
 from paseos import ActorBuilder, SpacecraftActor, GroundstationActor
 import torch
 
@@ -27,33 +28,30 @@ class SpaceCraftNode(BaseNode):
         self.earth = pk.planet.jpl_lp("earth")
         id = f"sat{self.rank}"
         sat = ActorBuilder.get_actor_scaffold(id, SpacecraftActor, cfg.t0)
-        ActorBuilder.set_orbit(
-            sat, pos_and_vel[0], pos_and_vel[1], cfg.t0, self.earth
-        )
+        ActorBuilder.set_orbit(sat, pos_and_vel[0], pos_and_vel[1], cfg.t0, self.earth)
         # Battery from https://sentinels.copernicus.eu/documents/247904/349490/S2_SP-1322_2.pdf
         # 87Ah * 28 Volt = 8.7696e9Ws
         ActorBuilder.set_power_devices(
             actor=sat,
-            battery_level_in_Ws=277200 * 0.5,
-            max_battery_level_in_Ws=277200,
-            charging_rate_in_W=20,
+            battery_level_in_Ws=cfg.battery_level_in_Ws,
+            max_battery_level_in_Ws=cfg.max_battery_level_in_Ws,
+            charging_rate_in_W=cfg.charging_rate_in_W
         )
         ActorBuilder.set_thermal_model(
             actor=sat,
-            actor_mass=6.0,
-            actor_initial_temperature_in_K=283.15,
-            actor_sun_absorptance=0.9,
-            actor_infrared_absorptance=0.5,
-            actor_sun_facing_area=0.012,
-            actor_central_body_facing_area=0.01,
-            actor_emissive_area=0.1,
-            actor_thermal_capacity=6000,
+            actor_mass=cfg.actor_mass,
+            actor_initial_temperature_in_K=cfg.actor_initial_temperature_in_K,
+            actor_sun_absorptance=cfg.actor_sun_absorptance,
+            actor_infrared_absorptance=cfg.actor_infrared_absorptance,
+            actor_sun_facing_area=cfg.actor_sun_facing_area,
+            actor_central_body_facing_area=cfg.actor_central_body_facing_area,
+            actor_emissive_area=cfg.actor_emissive_area,
+            actor_thermal_capacity=cfg.actor_thermal_capacity
         )
-        if cfg.mode == "Swarm" or cfg.mode == "FL_geostat":
-            bandwidth = 100000  # [kbps] 100 Mbps (optical link)
-        else:
-            bandwidth = 1000  # [kpbs] 1 Mbps (RF link)
-        ActorBuilder.add_comm_device(sat, device_name="link", bandwidth_in_kbps=bandwidth)
+
+        ActorBuilder.add_comm_device(
+            sat, device_name="link", bandwidth_in_kbps=cfg.bandwidth_in_kpbs
+        )
 
         paseos_cfg = paseos.load_default_cfg()  # loading paseos cfg to modify defaults
         self.paseos = paseos.init_sim(sat, paseos_cfg)
@@ -72,7 +70,7 @@ class SpaceCraftNode(BaseNode):
         )
         print(f"Comm duration: {self.comm_duration} s", flush=True)
 
-        self.update_time = 1e3
+        self.update_time = cfg.update_time
 
     def set_server_node(self, server_node: GroundstationActor):
         """Makes the server node known to the spacecraft
@@ -142,14 +140,19 @@ class SpaceCraftNode(BaseNode):
         update_attempts = 10
         while model_loaded == False and update_attempts > 0:
             try:
-                global_model = torch.load(f"{self.sim_path}/global_model.pt").state_dict()
+                global_model = torch.load(
+                    f"{self.sim_path}/global_model.pt"
+                ).state_dict()
                 self.model.train_model.to("cpu")
                 self.model.train_model.load_state_dict(global_model)
                 self.model._eval_model_update()
                 model_loaded = True
                 return model_loaded
             except:
-                print(f"Node{self.rank} failed loading global model, trying again", flush=True)
+                print(
+                    f"Node{self.rank} failed loading global model, trying again",
+                    flush=True,
+                )
                 update_attempts -= 1
 
         return model_loaded
@@ -173,26 +176,26 @@ class SpaceCraftNode(BaseNode):
         if (
             time_since_last_update > self.update_time
             and len(self.paseos.known_actors) > 0
-            and self.local_actor.state_of_charge > constants.COMM_MIN_SOC
-            and self.local_actor.temperature_in_K < constants.COMM_MAX_TEMP
+            and self.local_actor.state_of_charge > constants.COMM_MIN_STATE_OF_CHARGE
+            and self.local_actor.temperature_in_K < constants.COMM_MAX_TEMPERATURE
         ):
             self.local_actor._current_activity = "Model_update"
-            if self.mode == "Swarm":
-                return "Model_update", constants.SWARM_COMM_PWR, 0
+            if self.cfg.mode == "Swarm":
+                return "Model_update", constants.SWARM_COMM_POWER, 0
             else:
-                return "Model_update", constants.FL_GS_COMM_PWR, 0
+                return "Model_update", constants.FL_GS_COMM_POWER, 0
         elif (
-            self.local_actor.temperature_in_K > constants.STANDBY_TEMP
-            or self.local_actor.state_of_charge < constants.STANDBY_SOC
+            self.local_actor.temperature_in_K > constants.STANDBY_TEMPERATURE
+            or self.local_actor.state_of_charge < constants.STANDBY_STATE_OF_CHARGE
             or (time_in_standby > 0 and time_in_standby < standby_period)
         ):
             self.local_actor._current_activity = "Standby"
-            return "Standby", constants.STANDBY_PWR, time_in_standby + timestep
+            return "Standby", constants.STANDBY_POWER, time_in_standby + timestep
         else:
             # Wattage from 1605B https://www.amd.com/en/products/embedded-ryzen-v1000-series
             # https://unibap.com/wp-content/uploads/2021/06/spacecloud-ix5-100-product-overview_v23.pdf
             self.local_actor._current_activity = "Training"
-            return "Training", constants.TRAIN_PWR, 0
+            return "Training", constants.TRAIN_POWER, 0
 
     def perform_activity(self, power_consumption, time_to_run):
         """Performs an activity by consuming power and advancing the time.
@@ -219,7 +222,7 @@ class SpaceCraftNode(BaseNode):
 
         Returns:
             train_acc: test accuracy
-        """        
+        """
         train_acc = self.model.train_one_batch()
         return train_acc.cpu().numpy()
 
@@ -229,7 +232,7 @@ class SpaceCraftNode(BaseNode):
         Returns:
             loss: accumulated loss on the test set
             acc: average accuracy on the test set
-        """        
+        """
         loss, acc = self.model.evaluate()
         return loss, acc
 
@@ -244,28 +247,29 @@ class SpaceCraftNode(BaseNode):
             Whether constraint is still met
         """
         # Check constraints
-        if self.paseos.local_actor.temperature_in_K > (273.15 + 65):
+        if (
+            self.paseos.local_actor.temperature_in_K
+            > constants.CONSTRAINT_MAX_TEMPERATURE
+        ):
             return False
-        if self.paseos.local_actor.state_of_charge < 0.1:
+        if (
+            self.paseos.local_actor.state_of_charge
+            < constants.CONSTRAINT_MIN_STATE_OF_CHARGE
+        ):
             return False
 
         return True
 
     def aggregate_neighbors(self):
-        """Aggregate the neighboring models with the local model
-        """        
+        """Aggregate the neighboring models with the local model"""
         self.model.train_model.to("cpu")
         local_sd = self.model.train_model.state_dict()
-        # neighbor_sd = [m.state_dict() for m in rx_models]
-        weight = 1 / (len(self.ranks_in_lineofsight) + 1) # compute weight
-
-        for key in local_sd:
-            local_sd[key] = weight * local_sd[key]
-
+        weight = 1 / (len(self.ranks_in_lineofsight) + 1)  # compute weight
+        paths = []
         for i in self.ranks_in_lineofsight:
-            new_sd = torch.load(f"{self.sim_path}/node{i}_model.pt").to("cpu").state_dict()
-            for key in local_sd:
-                local_sd[key] += new_sd[key] * weight
+            paths.append(f"{self.sim_path}/node{i}_model.pt")
+
+        local_sd = aggregate_models(local_sd, weight, paths) # aggregate models
 
         # update training model with aggregated model
         self.model.train_model.load_state_dict(local_sd)

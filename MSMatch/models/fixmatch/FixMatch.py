@@ -75,13 +75,13 @@ class FixMatch:
         """
         self.train_model.to(self.device)
         self.eval_model.to(self.device)
-        
+
         train_model_params = (
             self.train_model.module.parameters()
             if hasattr(self.train_model, "module")
             else self.train_model.parameters()
         )
-        
+
         for param_train, param_eval in zip(
             train_model_params, self.eval_model.parameters()
         ):
@@ -98,7 +98,7 @@ class FixMatch:
         """Create iterators from dataloaders for training
 
         Args:
-            loader_dict (_type_): _description_
+            loader_dict (dict): dictionary containing dataloaders for labeled and unlabeled data
         """
         self.loader_dict = loader_dict
         self.print_fn(f"[!] data loader keys: {self.loader_dict.keys()}")
@@ -169,7 +169,7 @@ class FixMatch:
             "ce",
             self.T,
             self.p_cutoff,
-            use_hard_labels=self.use_hard_label
+            use_hard_labels=self.use_hard_label,
         )
         total_loss = sup_loss + self.lambda_u * unsup_loss
 
@@ -191,10 +191,11 @@ class FixMatch:
         """Evaluate the model performance.
 
         Args:
-            eval_loader (_type_, optional): Arbitrary data set to be used, if none, the test set is used. Defaults to None.
+            eval_loader (dict, optional): Arbitrary data set to be used, if none, the test set is used. Defaults to None.
 
         Returns:
-            _type_: _description_
+            loss: training loss on eval_loader dataset
+            acc: accuracy on eval_loader dataset
         """
         # empty cache (without entering context of current gpu, gpu0 may be initialized)
         with torch.cuda.device(self.device):

@@ -7,11 +7,12 @@ def load_node_partition(comm, cfg):
     Data partitions are created if they do not exist.
 
     Args:
-        comm (_type_): comm object to sync processes
-        cfg (_type_): config file for data partitioning
+        comm (mpi4py.MPI.Comm): comm object to sync processes
+        cfg (dict): config file for data partitioning
 
     Returns:
-        _type_: _description_
+        dict: dictionary containing the dataloaders for labeled, unlabeled and test data
+        cfg: cfg file updated with num_classes and num_channels fields
     """
 
     rank = comm.Get_rank()
@@ -48,7 +49,7 @@ def load_node_partition(comm, cfg):
         cfg.batch_size * cfg.uratio,
         data_sampler="RandomSampler",
         num_iters=cfg.num_train_iter,
-        num_workers=4,
+        num_workers=1,
         distributed=False,
     )
     # dataloader for test data

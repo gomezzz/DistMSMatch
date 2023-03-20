@@ -11,25 +11,23 @@ from .utils.print_cfg import print_cfg
 
 
 from .datasets.BasicDataset import BasicDataset
-from .datasets.EurosatRGBDataset import EurosatRGBDataset
+from .datasets.EurosatDataset import EurosatDataset
 from .datasets.SSL_Dataset import SSL_Dataset
 from .datasets.data_utils import get_data_loader
 from .datasets.load_node_partition import load_node_partition
 from .models.fixmatch.FixMatch import FixMatch
 from .node.server_node import ServerNode
 from .node.spacecraft_node import SpaceCraftNode
-from .node.base_node import BaseNode
 from .node.get_constellation import get_constellation
 from .node.node_utils import exchange_actors
 from .node.node_utils import announce_model_shared
 
 __all__ = [
     "BasicDataset",
-    "EurosatRGBDataset",
+    "EurosatDataset",
     "FixMatch",
     "ServerNode",
     "SpaceCraftNode",
-    "BaseNode",
     "get_constellation",
     "get_cosine_schedule_with_warmup",
     "get_data_loader",

@@ -1,6 +1,7 @@
 import pykep as pk
 from paseos import ActorBuilder, SpacecraftActor
 
+
 def parse_actor_data(actor_data):
     """Decode an actor from a data list
 
@@ -22,6 +23,7 @@ def parse_actor_data(actor_data):
         central_body=earth,
     )
     return actor
+
 
 def exchange_actors(node, verbose=False):
     """This function exchanges the states of various nodes among all MPI ranks.
@@ -81,7 +83,8 @@ def exchange_actors(node, verbose=False):
             f"Rank {node.rank} completed actor exchange. Knows {node.paseos.known_actor_names} now.",
             flush=True,
         )
-            
+
+
 def announce_model_shared(node, model_shared):
     """Anounces to the server that a model has been shared with it.
 
@@ -89,25 +92,25 @@ def announce_model_shared(node, model_shared):
        node (SpaceCraftNode): current node
        model_shared (bool): True if model has been shared
     """
-    
+
     # The server process will listen for local models
     # Note that the update of rank=0 must be treated separately
     if node.rank == 0:
         models_shared = node.server_node.models_shared
         models_shared[0] = model_shared
-        
-        recv_requests = [] # announce if rank = 0 shared the local model
+
+        recv_requests = []  # announce if rank = 0 shared the local model
         for i in node.other_ranks:
             recv_requests.append(
                 node.comm.irecv(source=i, tag=int(str(i) + str(node.rank)))
             )
-            
+
         for i, recv_request in enumerate(recv_requests):
-            data = recv_request.wait() # process 0 already updated
-            models_shared[i+1] |= data[0]
-        
+            data = recv_request.wait()  # process 0 already updated
+            models_shared[i + 1] |= data[0]
+
         node.server_node.models_shared = models_shared
-        
+
     else:
         # Announce to server process that model has been updated
         for i in node.other_ranks:

@@ -4,7 +4,7 @@ channels:
 - pytorch
 dependencies:
 #- cudatoolkit==10.2
-- python=3.8
+- python
 - pytorch==1.11.0
 - torchvision==0.12.0
 - pillow
@@ -24,7 +24,7 @@ dependencies:
 - imgaug
 - jupyter
 - pip
+- paseos==0.1.3
 - pip:
   - efficientnet_lite_pytorch
   - efficientnet_lite0_pytorch_model
-  - paseos==0.1.3
