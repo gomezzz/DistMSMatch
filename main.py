@@ -57,7 +57,7 @@ def main_loop():
     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
 
         # Get position and velocity for geostationary satellite
-        planet_list, sats_pos_and_v = mm.get_constellation(
+        planet_list, cfg.geostationary_pos_and_v = mm.get_constellation(
             altitude=35786 * 1000,
             inclination=0,
             nSats=1,
@@ -67,7 +67,7 @@ def main_loop():
         )
 
         # create server node and save a global model
-        server_node = mm.ServerNode(cfg, list(range(size)), sats_pos_and_v)
+        server_node = mm.ServerNode(cfg, list(range(size)), cfg.geostationary_pos_and_v)
 
         if rank == 0:
             server_node.save_global_model()
@@ -127,9 +127,7 @@ def main_loop():
             )
 
         if cfg.mode == "Swarm":
-            mm.exchange_actors(
-                node
-            )  # Find out what actors can be seen and what the other actors are doing
+            mm.exchange_actors(node)  # Find out what actors can be seen and what the other actors are doing
         else:
             node.check_if_sever_available()  # check if server is visible and add to known actors
             if node.rank == 0:
@@ -150,7 +148,6 @@ def main_loop():
                         f"Node{rank} will update with {node.paseos.known_actor_names} at {sim_time}",
                         flush=True,
                     )
-
                 # initiate communications
                 communication_started_times.append(
                     sim_time

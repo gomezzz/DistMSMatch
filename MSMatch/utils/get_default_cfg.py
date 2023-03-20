@@ -1,8 +1,5 @@
 from dotmap import DotMap
-import os
 import time
-from .create_dir_string import create_dir_str
-
 
 def get_default_cfg():
     """Returns the default configuration for MSMatch.
@@ -12,7 +9,7 @@ def get_default_cfg():
     """
     cfg = DotMap(_dynamic=False)
 
-    cfg.mode = "FL_ground"  # "FL_ground", "FL_geostat", "Swarm"
+    cfg.mode = "Swarm"  # "FL_ground", "FL_geostat", "Swarm"
     cfg.save_dir = "./results/"
     cfg.nodes = 8  # number of spacecraft participating in colaborative learning
 
@@ -56,26 +53,28 @@ def get_default_cfg():
     cfg.constellation_inclination = 98.62  # inclination of the orbit
 
     # onboard power device settings
-    cfg.battery_level_in_Ws = (277200 * 0.5,)
-    cfg.max_battery_level_in_Ws = (277200,)
-    cfg.charging_rate_in_W = (20,)
+    cfg.battery_level_in_Ws = 277200 * 0.5
+    cfg.max_battery_level_in_Ws = 277200
+    cfg.charging_rate_in_W = 20
 
     # onboard temperature settings
-    cfg.actor_mass = (6.0,)
-    cfg.actor_initial_temperature_in_K = (283.15,)
-    cfg.actor_sun_absorptance = (0.9,)
-    cfg.actor_infrared_absorptance = (0.5,)
-    cfg.actor_sun_facing_area = (0.012,)
-    cfg.actor_central_body_facing_area = (0.01,)
-    cfg.actor_emissive_area = (0.1,)
-    cfg.actor_thermal_capacity = (6000,)
+    cfg.actor_mass = 6.0
+    cfg.actor_initial_temperature_in_K = 283.15
+    cfg.actor_sun_absorptance = 0.9
+    cfg.actor_infrared_absorptance = 0.5
+    cfg.actor_sun_facing_area = 0.012
+    cfg.actor_central_body_facing_area = 0.01
+    cfg.actor_emissive_area = 0.1
+    cfg.actor_thermal_capacity = 6000
 
     # onboard communication device
     if cfg.mode == "Swarm" or cfg.mode == "FL_geostat":
         cfg.bandwidth_in_kpbs = 100000  # [kbps] 100 Mbps (optical link)
     else:
         cfg.bandwidth_in_kpbs = 1000  # [kpbs] 1 Mbps (RF link)
-
+    cfg.compression_ratio = 12.7/13.8 # 13.8 and 12.7 MB are the sizes of original and zipped version of the model
+    
+    # Groundstation coordinates
     if cfg.mode == "FL_ground":
         cfg.stations = [
             ["Maspalomas", 27.7629, -15.6338, 205.1],

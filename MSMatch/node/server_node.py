@@ -41,7 +41,7 @@ class ServerNode(BaseNode):
                 self.actors.append(gs_actor)
         elif cfg.mode == "FL_geostat":
             geosat = ActorBuilder.get_actor_scaffold(
-                "EDRS-C", SpacecraftActor, epoch=pk.epoch(0)
+                "EDRS-C", SpacecraftActor, epoch=cfg.t0
             )
 
             # Compute orbits of geostationary satellite
@@ -72,7 +72,7 @@ class ServerNode(BaseNode):
             for rank, model_shared in enumerate(self.models_shared):
                 if model_shared:
                     print(f"Updating global model with node{rank}", flush=True)
-                    paths.append(f"{self.sim_path}/node{rank}_model.pt")
+                    paths.append(f"{self.cfg.sim_path}/node{rank}_model.pt")
                     self.models_shared[rank] = False
 
             aggregate_models(local_sd, weight, paths) # aggregate local models with global model

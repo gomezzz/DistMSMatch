@@ -63,7 +63,7 @@ class SpaceCraftNode(BaseNode):
                 x for x in range(self.comm.Get_size()) if x != self.rank
             ]  # get all other process numbers
 
-        model_size_kb = self._get_model_size_bytes() * 8 / 1e3
+        model_size_kb = cfg.compression_ratio * self._get_model_size_bytes() * 8 / 1e3
         self.comm_duration = (
             model_size_kb
             / self.local_actor.communication_devices["link"].bandwidth_in_kbps
@@ -141,7 +141,7 @@ class SpaceCraftNode(BaseNode):
         while model_loaded == False and update_attempts > 0:
             try:
                 global_model = torch.load(
-                    f"{self.sim_path}/global_model.pt"
+                    f"{self.cfg.sim_path}/global_model.pt"
                 ).state_dict()
                 self.model.train_model.to("cpu")
                 self.model.train_model.load_state_dict(global_model)
@@ -267,7 +267,7 @@ class SpaceCraftNode(BaseNode):
         weight = 1 / (len(self.ranks_in_lineofsight) + 1)  # compute weight
         paths = []
         for i in self.ranks_in_lineofsight:
-            paths.append(f"{self.sim_path}/node{i}_model.pt")
+            paths.append(f"{self.cfg.sim_path}/node{i}_model.pt")
 
         local_sd = aggregate_models(local_sd, weight, paths) # aggregate models
 
