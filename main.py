@@ -10,6 +10,7 @@ import pykep as pk
 from loguru import logger
 import paseos
 from mpi4py import MPI
+import argparse
 
 
 def main_loop():
@@ -18,9 +19,13 @@ def main_loop():
     rank = comm.Get_rank()  # get process number of current instance
     size = comm.Get_size()
 
+    # Parse config argument if any
+    parser = argparse.ArgumentParser(description='Load config file.')
+    parser.add_argument('--cfg_path', default=None, help='path to the config file')
+    args = parser.parse_args()  
+    
     # Load config file
-    cfg = mm.load_cfg(cfg_path=None)
-
+    cfg = mm.load_cfg(args.cfg_path, rank)        
     mm.set_seeds(cfg.seed)  # set seed
 
     # make sure that each satellite has a process
@@ -30,9 +35,8 @@ def main_loop():
     # -------------------------------
     # PASEOS setup
     # -------------------------------
-    node_dls, cfg = mm.load_node_partition(
-        comm, cfg
-    )  # load the partition for the current process
+    # load the partition for the current process
+    node_dls, cfg = mm.load_node_partition(comm, cfg)  
 
     cfg.t0 = pk.epoch_from_string(cfg.start_time)  # starting date of our simulation
     # Obtain the coordinate and position for the current node
@@ -49,26 +53,29 @@ def main_loop():
     sats_pos_and_v = sats_pos_and_v[rank]
     node = mm.SpaceCraftNode(sats_pos_and_v, cfg, node_dls, comm)
 
-    # For FL, the server operates on rank = 0
+    
     if rank == 0:
-        os.makedirs(cfg.sim_path)
+        if not os.path.exists(cfg.sim_path):
+            os.makedirs(cfg.sim_path)
 
     # create parameter server if needed
     if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
 
-        # Get position and velocity for geostationary satellite
-        planet_list, cfg.geostationary_pos_and_v = mm.get_constellation(
-            altitude=35786 * 1000,
-            inclination=0,
-            nSats=1,
-            nPlanes=1,
-            t0=cfg.t0,
-            startingW=31,
-        )
-
-        # create server node and save a global model
-        server_node = mm.ServerNode(cfg, list(range(size)), cfg.geostationary_pos_and_v)
-
+        if cfg.mode == "FL_geostat":
+            # Get position and velocity for geostationary satellite
+            planet_list, geostationary_pos_and_v = mm.get_constellation(
+                altitude=35786 * 1000,
+                inclination=0,
+                nSats=1,
+                nPlanes=1,
+                t0=cfg.t0,
+                startingW=31,
+            )
+            server_node = mm.ServerNode(cfg, list(range(size)), geostationary_pos_and_v)
+        else:
+            server_node = mm.ServerNode(cfg, list(range(size)), None)
+        
+        # For FL, the server operates on rank = 0
         if rank == 0:
             server_node.save_global_model()
 

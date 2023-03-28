@@ -1,5 +1,4 @@
 from dotmap import DotMap
-import time
 
 def get_default_cfg():
     """Returns the default configuration for MSMatch.
@@ -12,14 +11,6 @@ def get_default_cfg():
     cfg.mode = "Swarm"  # "FL_ground", "FL_geostat", "Swarm"
     cfg.save_dir = "./results/"
     cfg.nodes = 8  # number of spacecraft participating in colaborative learning
-
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    if cfg.mode == "Swarm":
-        cfg.sim_path = cfg.save_dir + f"ISL/{timestr}"
-    elif cfg.mode == "FL_ground":
-        cfg.sim_path = cfg.save_dir + f"FL_ground/{timestr}"
-    elif cfg.mode == "FL_geostat":
-        cfg.sim_path = cfg.save_dir + f"FL_geostat/{timestr}"
 
     # Configuration related to the dataset
     cfg.dataset = "eurosat_rgb"  # "eurosat_ms" # "eurosat_rgb"

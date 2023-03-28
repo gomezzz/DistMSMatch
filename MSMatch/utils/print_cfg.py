@@ -31,6 +31,3 @@ def print_cfg(cfg: DotMap):
                     print(f"{key:<28}: {value:<15}|", end="")
 
         idx += 1
-    save_path_key = "save_path"
-    print("\n")
-    print(f"{save_path_key:<28}: {save_path:<15}")

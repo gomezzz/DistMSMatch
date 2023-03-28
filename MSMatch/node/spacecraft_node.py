@@ -121,7 +121,7 @@ class SpaceCraftNode(BaseNode):
         window_end = pk.epoch(
             self.local_actor.local_time.mjd2000 + 2 * self.comm_duration * pk.SEC2DAY
         )
-        self.paseos.emtpy_known_actors()  # forget about previously known actors
+        self.paseos.empty_known_actors()  # forget about previously known actors
         for server in self.server_node.actors:
             if self.local_actor.is_in_line_of_sight(
                 server, epoch=window_start

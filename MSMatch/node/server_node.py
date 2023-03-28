@@ -29,13 +29,13 @@ class ServerNode(BaseNode):
         if cfg.mode == "FL_ground":
             for station in cfg.stations:
                 gs_actor = ActorBuilder.get_actor_scaffold(
-                    name=station[0], actor_type=GroundstationActor, epoch=cfg.t0
+                    name=station[0][0], actor_type=GroundstationActor, epoch=cfg.t0
                 )
                 ActorBuilder.set_ground_station_location(
                     gs_actor,
-                    latitude=station[1],
-                    longitude=station[2],
-                    elevation=station[3],
+                    latitude=station[1][0],
+                    longitude=station[1][1],
+                    elevation=station[1][2],
                     minimum_altitude_angle=cfg.minimum_altitude_angle,
                 )
                 self.actors.append(gs_actor)

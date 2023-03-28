@@ -39,7 +39,7 @@ def exchange_actors(node, verbose=False):
         print(f"Rank {node.rank} starting actor exchange.", flush=True)
     send_requests = []  # track our send requests
     recv_requests = []  # track our receive request
-    node.paseos.emtpy_known_actors()  # forget about previously known actors
+    node.paseos.empty_known_actors()  # forget about previously known actors
 
     # Send local actor to other ranks
     for i in node.other_ranks:

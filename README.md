@@ -77,15 +77,17 @@ We recommend using [conda](https://docs.conda.io/en/latest/) to set-up your envi
 To launch the training on `EuroSAT (rgb)`, it is necessary to download the corresponding datasets. Please place the dataset in `/data/EuroSAT_RGB`.  Alternatively, you can change the `root_dir` variable in the `datasets/EurosatRGBDataset.py` to point to the dataset. The dataset can be download [here](https://github.com/phelber/EuroSAT). 
 
 ### Run training
-To run the training, you can exploit the `run_notebook.py` script to run a notebook. The `Baseline.ipynb` notebook contains the `MSMatch`baseline. Different configurations files in `.toml` format can be used to set-up the different `MsMatch`hyperparameters. 
+The training is performed using the `mpi4py` package and utilizes multiple processes to control the different spacecraft.
+Different configurations files in `.toml` format can be used to set-up `DistMsMatch` in swarm or federated mode.
+The federated mode may be performed using a ground station or a geostationary satellite as parameter server.
 
-To run the notebook, you can proceed as follows:
+To run the training using 8 spacecraft, you can proceed as follows:
 
 ```
-python run_notebook.py --notebook_path path_to_notebook --cfg_path path_to_cfg_file 
+mpiexec -n 8 python main.py --cfg_path path_to_cfg_file 
 ````
 
-If `notebook_path` and `path_to_cfg_file` are not specified, the `Baseline.ipynb` notebook  will be run with default configuration.
+If `path_to_cfg_file` is not specified, the default swarm learning scenario will be run using eight spacecraft.
 
 <!-- CONTRIBUTING -->
 ## Contributing
