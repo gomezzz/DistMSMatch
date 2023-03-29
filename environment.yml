@@ -3,7 +3,7 @@ channels:
 - conda-forge
 - pytorch
 dependencies:
-#- cudatoolkit==10.2
+- cudatoolkit==10.2
 - python
 - pytorch==1.11.0
 - torchvision==0.12.0
@@ -19,10 +19,12 @@ dependencies:
 - dotmap
 - termcolor
 - toml
-- papermill
 - matplotlib
+- imgaug
 - jupyter
+- mpi4py
 - pip
+- paseos==0.1.3
 - pip:
   - efficientnet_lite_pytorch
   - efficientnet_lite0_pytorch_model

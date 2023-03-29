@@ -20,6 +20,7 @@ def create_dir_str(cfg):
         + "_seed"           + str(cfg.seed)
         + "_numlabels"      + str(cfg.num_labels)
         + "_opt"            + str(cfg.opt)
+        + "_nodes"          + str(cfg.nodes)
     )
     # fmt: on
     if cfg.pretrained:
