@@ -54,6 +54,7 @@ class SpaceCraftNode(BaseNode):
         )
 
         paseos_cfg = paseos.load_default_cfg()  # loading paseos cfg to modify defaults
+        paseos_cfg.sim.start_time = cfg.t0.mjd2000 * pk.DAY2SEC # overwrite the starting time for PASEOS config
         self.paseos = paseos.init_sim(sat, paseos_cfg)
         self.local_actor = self.paseos.local_actor
 

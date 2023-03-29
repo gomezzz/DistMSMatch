@@ -112,6 +112,7 @@ def main_loop():
 
     total_time = 15 * 24 * 3600  # total simulation time
     batch_idx = 0  # starting batch index
+    start_time_in_seconds = cfg.t0.mjd2000 * pk.DAY2SEC
     sim_time = 0  # simulation time
 
     paseos.set_log_level("INFO")
@@ -121,7 +122,7 @@ def main_loop():
         if rank == 0:
             print(f"batch: {batch_idx}, time: {sim_time}", flush=True, end="\r")
 
-        sim_time = node.paseos._state.time  # keep track of simulation time
+        sim_time = node.paseos._state.time - start_time_in_seconds  # keep track of simulation time
 
         # if the model countdown is positive, we are still communicating and should not update the activity/power consumption
         if time_until_comms_complete == 0:
