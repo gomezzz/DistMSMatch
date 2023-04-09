@@ -78,5 +78,5 @@ class BaseNode:
     def save_model(self, name):
         """Save the training model to folder"""
         torch.save(
-            self.model.train_model, f"{self.cfg.sim_path}/{name}.pt"
+            self.model.eval_model, f"{self.cfg.sim_path}/{name}.pt"
         )  # save trained model

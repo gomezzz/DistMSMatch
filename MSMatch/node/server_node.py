@@ -53,8 +53,7 @@ class ServerNode(BaseNode):
 
         self.node_ranks = node_ranks
         self.models_shared = [False for i in range(len(node_ranks))]
-
-        self.model.train_model.to(self.device)
+        self.aggregation_weight = 0.4 # new_model = aggregation_weight * old_model + (1 - aggregation_weight) * new_model
 
     def save_global_model(self):
         self.save_model("global_model")
@@ -63,9 +62,14 @@ class ServerNode(BaseNode):
         """Updated the global model with models received by averaging weights and then save the new model to folder."""
         n_models = sum(self.models_shared)
         if n_models > 0:
-            # make sure that we have at least 3 models to aggregate
-            local_sd = self.model.train_model.state_dict()
-            weight = 1 / (n_models + 1)
+            local_sd = self.model.eval_model.state_dict()
+            
+            weights = torch.ones(n_models + 1)
+            weights[0] *= self.aggregation_weight 
+            mask = torch.zeros_like(weights, dtype=torch.bool)
+            mask[0] = 1
+            val = (1 - self.aggregation_weight) / n_models
+            weights = torch.where(mask, weights, torch.ones_like(weights) * val)
 
             # get the local models that have been shared
             paths = []
@@ -75,8 +79,8 @@ class ServerNode(BaseNode):
                     paths.append(f"{self.cfg.sim_path}/node{rank}_model.pt")
                     self.models_shared[rank] = False
 
-            aggregate_models(local_sd, weight, paths) # aggregate local models with global model
+            new_sd = aggregate_models(local_sd, weights, paths) # aggregate local models with global model
 
             # update server model with aggregated models
-            self.model.train_model.load_state_dict(local_sd)
+            self.model.eval_model.load_state_dict(new_sd)
             self.save_global_model()

@@ -1,12 +1,12 @@
 import torch
 
-def aggregate_models(local_sd, weight, paths):
+def aggregate_models(local_sd, weights, paths):
     """Aggregate models with a reference model
     
     Args:
         local_sd (dict): reference model
-        weight (float): weight for weighted average
-        paths (list): list of paths to the models to me aggregated
+        weights (torch): weights for the different models (reference model is the first)
+        paths (list): list of paths to the models to be aggregated
     """
     # Load the models
     local_models = []
@@ -20,8 +20,6 @@ def aggregate_models(local_sd, weight, paths):
     
     # Aggregate the models
     for key in local_sd:
-        local_sd[key] = weight * local_sd[key] + sum(
-            [sd[key] * weight for sd in local_models]
-            )
+        local_sd[key] = weights[0] * local_sd[key] + sum([sd[key] * weights[i+1] for i, sd in enumerate(local_models)])
     
     return local_sd

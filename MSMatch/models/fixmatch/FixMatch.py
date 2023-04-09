@@ -114,7 +114,7 @@ class FixMatch:
         """
         self.optimizer = optimizer
         self.scheduler = scheduler
-
+    
     def train_one_batch(self):
         """Train function of FixMatch for one batch.
 
@@ -182,7 +182,7 @@ class FixMatch:
         with torch.no_grad():
             self._eval_model_update()
             train_accuracy = accuracy(logits_x_lb, y_lb)
-            train_accuracy = train_accuracy[0].cpu()
+            train_accuracy = float(train_accuracy[0][0].detach().cpu())
 
         return train_accuracy
 
@@ -227,7 +227,7 @@ class FixMatch:
         if not use_ema:
             eval_model.train()
 
-        loss = total_loss.detach().cpu() / total_num
-        acc = total_acc.detach().cpu() / total_num
+        loss = float(total_loss.detach().cpu() / total_num)
+        acc = float(total_acc.detach().cpu() / total_num)
 
         return loss, acc
