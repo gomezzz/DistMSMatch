@@ -11,6 +11,7 @@ def get_default_cfg():
     cfg.mode = "Swarm"  # "FL_ground", "FL_geostat", "Swarm"
     cfg.save_dir = "./results/"
     cfg.nodes = 8  # number of spacecraft participating in colaborative learning
+    cfg.monte_carlo_iterations = 2  # number of Monte Carlo iterations
 
     # Configuration related to the dataset
     cfg.dataset = "eurosat_rgb"  # "eurosat_ms" # "eurosat_rgb"

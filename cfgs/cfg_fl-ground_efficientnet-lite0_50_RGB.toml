@@ -1,6 +1,7 @@
 mode = "FL_ground"  # "FL_ground", "FL_geostat", "Swarm"
 save_dir = "./results/"
 nodes = 8  # number of spacecraft participating in colaborative learning
+monte_carlo_iterations = 3  # number of Monte Carlo iterations
 
 # Configuration related to the dataset
 dataset = "eurosat_rgb"  # "eurosat_ms" # "eurosat_rgb"
