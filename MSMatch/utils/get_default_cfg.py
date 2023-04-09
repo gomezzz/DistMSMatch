@@ -8,10 +8,10 @@ def get_default_cfg():
     """
     cfg = DotMap(_dynamic=False)
 
-    cfg.mode = "Swarm"  # "FL_ground", "FL_geostat", "Swarm"
+    cfg.mode = "FL_geostat"  # "FL_ground", "FL_geostat", "Swarm"
     cfg.save_dir = "./results/"
     cfg.nodes = 8  # number of spacecraft participating in colaborative learning
-    cfg.monte_carlo_iterations = 2  # number of Monte Carlo iterations
+    cfg.monte_carlo_iterations = 3  # number of Monte Carlo iterations
 
     # Configuration related to the dataset
     cfg.dataset = "eurosat_rgb"  # "eurosat_ms" # "eurosat_rgb"
@@ -65,13 +65,14 @@ def get_default_cfg():
     else:
         cfg.bandwidth_in_kpbs = 1000  # [kpbs] 1 Mbps (RF link)
     cfg.compression_ratio = 12.7/13.8 # 13.8 and 12.7 MB are the sizes of original and zipped version of the model
+    cfg.ISL_setup_time = 30 # [s] set-up time using Mynaric’s LCT CONDOR (if satellites have been talking before)
     
     # Groundstation coordinates
     if cfg.mode == "FL_ground":
         cfg.stations = [
-            ["Maspalomas", 27.7629, -15.6338, 205.1],
-            ["Matera", 40.6486, 16.7046, 536.9],
-            ["Svalbard", 78.9067, 11.8883, 474.0],
+            [["Maspalomas"], [27.7629, -15.6338, 205.1]],
+            [["Matera"], [40.6486, 16.7046, 536.9]],
+            [["Svalbard"], [78.9067, 11.8883, 474.0]],
         ]
         cfg.minimum_altitude_angle = 5
 

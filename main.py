@@ -116,14 +116,13 @@ def main_loop():
 
         verbose = True  # Print what is going on
 
-        total_time = 0.025 * 24 * 3600  # total simulation time
+        total_time = 0.02 * 24 * 3600  # total simulation time
         batch_idx = 0  # starting batch index
         start_time_in_seconds = cfg.t0.mjd2000 * pk.DAY2SEC
         sim_time = 0  # simulation time
 
         paseos.set_log_level("INFO")
         while sim_time <= total_time:
-
             # print current step
             if rank == 0:
                 print(f"batch: {batch_idx}, time: {sim_time}", flush=True, end="\r")
@@ -163,28 +162,22 @@ def main_loop():
                             flush=True,
                         )
                     # initiate communications
-                    accumulated_data.communication_started_times[monte_carlo_iteration].append(
-                        sim_time
-                    )  # store time for communication start
-                    time_until_comms_complete = (
-                        2 * time_for_comms
-                    )  # transmit to two neighbors in sequence (swarm) or uplink/downlink (FL)
-
+                    accumulated_data.communication_started_times[monte_carlo_iteration].append(sim_time)  # store time for communication start
+                    time_until_comms_complete = 2 * time_for_comms  # transmit to two neighbors in sequence (swarm) or uplink/downlink (FL)
+                    
+                    communication_complete_in_one_step = (time_until_comms_complete - time_per_batch) <= 0 # check if communication is over in a single step
                 else:
-                    time_until_comms_complete -= time_per_batch  # decrease time
-
-                    model_arrived_at_server = (
-                        time_until_comms_complete < time_for_comms
-                    ) and  time_until_comms_complete > (time_for_comms - time_per_batch)
+                    time_until_comms_complete = time_until_comms_complete-time_per_batch  # decrease time
+                    communication_complete = time_until_comms_complete < 0
 
                     # check if communications is over
-                    if time_until_comms_complete < 0:
+                    if communication_complete:
                         time_until_comms_complete = 0
                         if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-                            node.get_global_model()  # get current global model
+                            node.get_global_model()  # get current global model at node
                         else:
                             node.aggregate_neighbors()  # aggregate received models (loaded from folders)
-                        time_since_last_update = 0
+                        time_since_last_update = 0 # reset time since last update
                         loss, acc = node.evaluate()  # evaluate updated model
 
                         # Store values
@@ -193,17 +186,17 @@ def main_loop():
                         accumulated_data.test_accuracy[monte_carlo_iteration].append(acc)
                         accumulated_data.local_time_at_test[monte_carlo_iteration].append(sim_time)
 
-                        print(
-                            f"Rank {node.rank}, post aggregation: eval acc: {acc}",
-                            flush=True,
-                        )
-                    # the client model reached the server node (FL)
-                    elif model_arrived_at_server:
-                        if cfg.mode == "FL_ground" or cfg.mode == "FL_geostat":
-                            node.save_model(
-                                f"node{rank}_model"
-                            )  # "communicate" the local model to the server by storing it to a folder
-                            model_shared = True
+                        print(f"Rank {node.rank}, post aggregation: eval acc: {acc}", flush=True)
+                        
+                # Check if the model has arrived at the server node (in case of federated learning)
+                # or if the communications will be completed in the next step
+                half_way = (2 * time_for_comms) / 2
+                one_way_completed = ( time_until_comms_complete < half_way) and  time_until_comms_complete > (half_way - time_per_batch)
+                model_arrived_at_server = one_way_completed or communication_complete_in_one_step
+                
+                if (cfg.mode == "FL_ground" or cfg.mode == "FL_geostat") and model_arrived_at_server:
+                    node.save_model(f"node{rank}_model")  # "communicate" the local model to the server by storing it to a folder
+                    model_shared = True
 
                 # increase time for communication
                 node.perform_activity(power_consumption, time_per_batch)
@@ -247,11 +240,6 @@ def main_loop():
     # Save things to become a happy camper
     cfg.save_path = cfg.sim_path + f"/node{rank}"
     with open(cfg.save_path+f"_accumulated_data.json", 'w') as f:
-        # make data json serializable
-        for i in range(cfg.monte_carlo_iterations):
-            accumulated_data.test_accuracy[i] = accumulated_data.test_accuracy[i][0].tolist()
-            accumulated_data.test_losses[i] = accumulated_data.test_losses[i][0].tolist()
-            accumulated_data.train_accuracy[i] = accumulated_data.train_accuracy[i][0].tolist()
         json.dump(accumulated_data.toDict(), f)
     node.paseos.save_status_log_csv(cfg.save_path + f"_paseos_data.csv")
 

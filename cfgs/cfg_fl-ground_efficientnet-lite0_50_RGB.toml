@@ -60,3 +60,4 @@ minimum_altitude_angle = 5
 bandwidth_in_kpbs = 1000  # [kbps] 1 Mbps (RF link)
 compression_ratio = 0.92 # 13.8 and 12.7 MB are the sizes of original and zipped version of the model
 update_time = 1e3 # [s] how much time should pass before attempting to share model
+ISL_setup_time = 0 # ISL not used

@@ -6,7 +6,6 @@ from .aggregation import aggregate_models
 from paseos import ActorBuilder, SpacecraftActor, GroundstationActor
 import torch
 
-
 class SpaceCraftNode(BaseNode):
     """Class to create a spacecraft node
 
@@ -69,6 +68,7 @@ class SpaceCraftNode(BaseNode):
             model_size_kb
             / self.local_actor.communication_devices["link"].bandwidth_in_kbps
         )
+        self.comm_duration += self.comm_duration + cfg.ISL_setup_time # add setup time to the communication duration
         print(f"Comm duration: {self.comm_duration} s", flush=True)
 
         self.update_time = cfg.update_time
@@ -144,9 +144,8 @@ class SpaceCraftNode(BaseNode):
                 global_model = torch.load(
                     f"{self.cfg.sim_path}/global_model.pt"
                 ).state_dict()
-                self.model.train_model.to("cpu")
                 self.model.train_model.load_state_dict(global_model)
-                self.model._eval_model_update()
+                self.model.eval_model.load_state_dict(global_model)
                 model_loaded = True
                 return model_loaded
             except:
@@ -225,7 +224,7 @@ class SpaceCraftNode(BaseNode):
             train_acc: test accuracy
         """
         train_acc = self.model.train_one_batch()
-        return train_acc.cpu().numpy()
+        return train_acc
 
     def evaluate(self):
         """Evaluate the eval model on the test set
@@ -265,17 +264,19 @@ class SpaceCraftNode(BaseNode):
         """Aggregate the neighboring models with the local model"""
         self.model.train_model.to("cpu")
         local_sd = self.model.train_model.state_dict()
-        weight = 1 / (len(self.ranks_in_lineofsight) + 1)  # compute weight
+        num_neighbors = len(self.ranks_in_lineofsight)
+        weights = (1 / (num_neighbors + 1)) * torch.ones(num_neighbors+1)
         paths = []
         for i in self.ranks_in_lineofsight:
             paths.append(f"{self.cfg.sim_path}/node{i}_model.pt")
 
-        local_sd = aggregate_models(local_sd, weight, paths) # aggregate models
+        local_sd = aggregate_models(local_sd, weights, paths) # aggregate models
 
-        # update training model with aggregated model
+        # update training and eval model with aggregated model
         self.model.train_model.load_state_dict(local_sd)
+        self.model.eval_model.load_state_dict(local_sd)
         self.model.train_model.to(self.device)
         self.model.eval_model.to(self.device)
-        self.model._eval_model_update()
+        
 
         self.do_training = True
