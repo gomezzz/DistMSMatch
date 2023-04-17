@@ -12,6 +12,7 @@ def get_constellation(altitude, inclination, nSats, nPlanes, t0, startingW=0):
         nSats (int): Number of sats per plane.
         nPlanes (int): Number of orbital planes.
         t0 (pk.epoch): Initial time.
+        startingW (int, optional): offset for W that is not accumulating (W = longitude of ascending node). Defaults to 0.
     Returns:
         planets,satellites: pykep planets and list of (r,v) of the constellation.
     """
@@ -30,7 +31,7 @@ def get_constellation(altitude, inclination, nSats, nPlanes, t0, startingW=0):
     # startingW = offset for W that is not accumulating (W = longitude of ascending node)
     # formula for overlapping shells (same altitude, same inclination):
     # (360 / G) / 2 ; G = smallest common multiple of the overlapping nPlanes
-    startingW = startingW  # default 0
+    # startingW = 0  # default 0
 
     # W_area: orbital planes are distributed evenly within range [startingW,startingW + maximumW)
     W_area = 360  # default 360

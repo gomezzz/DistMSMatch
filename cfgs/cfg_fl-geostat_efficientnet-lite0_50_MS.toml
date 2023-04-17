@@ -1,0 +1,54 @@
+mode = "FL_geostat"  # "FL_ground", "FL_geostat", "Swarm"
+save_dir = "./results/"
+nodes = 8  # number of spacecraft participating in colaborative learning
+
+# Configuration related to the dataset
+dataset = "eurosat_ms"  # "eurosat_ms" # "eurosat_rgb"
+alpha = 100  # (0,inf), data heterogeneity (higher means more homogeneous)
+
+# Configuration related to the neural networks
+net = "efficientnet-lite0"
+batch_size = 32
+p_cutoff = 0.95
+lr = 0.03
+uratio = 3
+weight_decay = 7.5e-4
+ulb_loss_ratio = 1.0
+seed = 42
+num_labels = 50
+num_train_iter = 500
+opt = "SGD"
+pretrained = true
+ema_m = 0.99
+eval_batch_size = 64
+momentum = 0.9
+T = 0.5
+amp = false
+hard_label = true
+scale = 1
+
+# PASEOS specific configuration
+start_time = "2023-Dec-17 14:42:42"
+planes = 1
+constellation_altitude = 786000  # altitude above the Earth's ground [m]
+constellation_inclination = 98.62  # inclination of the orbit
+
+# onboard power device settings
+battery_level_in_Ws = 138600 # half the battery level
+max_battery_level_in_Ws = 277200
+charging_rate_in_W = 20
+
+# onboard temperature settings
+actor_mass = 6.0
+actor_initial_temperature_in_K = 283.15
+actor_sun_absorptance = 0.9
+actor_infrared_absorptance = 0.5
+actor_sun_facing_area = 0.012
+actor_central_body_facing_area = 0.01
+actor_emissive_area = 0.1
+actor_thermal_capacity = 6000
+
+# onboard communication device
+bandwidth_in_kpbs = 100000  # [kbps] 100 Mbps (optical link)
+compression_ratio = 0.92 # 13.8 and 12.7 MB are the sizes of original and zipped version of the model
+update_time = 1e3 # [s] how much time should pass before attempting to share model

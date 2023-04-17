@@ -1,10 +1,5 @@
 from dotmap import DotMap
 
-import os
-
-from .create_dir_string import create_dir_str
-
-
 def get_default_cfg():
     """Returns the default configuration for MSMatch.
 
@@ -12,36 +7,75 @@ def get_default_cfg():
         DotMap: the default configuration
     """
     cfg = DotMap(_dynamic=False)
-    cfg.dataset = "eurosat_rgb"
+
+    cfg.mode = "Swarm"  # "FL_ground", "FL_geostat", "Swarm"
+    cfg.save_dir = "./results/"
+    cfg.nodes = 8  # number of spacecraft participating in colaborative learning
+
+    # Configuration related to the dataset
+    cfg.dataset = "eurosat_rgb"  # "eurosat_ms" # "eurosat_rgb"
+    cfg.alpha = 100  # (0,inf), data heterogeneity (higher means more homogeneous)
+
+    # Configuration related to the neural networks
     cfg.net = "efficientnet-lite0"
     cfg.batch_size = 32
     cfg.p_cutoff = 0.95
     cfg.lr = 0.03
-    cfg.uratio = 7
+    cfg.uratio = 3
     cfg.weight_decay = 7.5e-4
     cfg.ulb_loss_ratio = 1.0
     cfg.seed = 42
-    cfg.num_labels = 1000
+    cfg.num_labels = 50
+    cfg.num_train_iter = (100 * cfg.num_labels) // cfg.batch_size
     cfg.opt = "SGD"
-    cfg.pretrained = False
-    cfg.save_dir = "./results/"
+    cfg.pretrained = True
     cfg.ema_m = 0.99
-    cfg.bn_momentum = 1.0 - cfg.ema_m
-    cfg.eval_batch_size = 1024
+    cfg.eval_batch_size = 64
     cfg.momentum = 0.9
     cfg.T = 0.5
     cfg.amp = False
     cfg.hard_label = True
-    cfg.num_eval_iter = 100 # iterations in an epoch
-    cfg.local_epochs = 1
     cfg.scale = 1
-    cfg.training_rounds = 100
-    cfg.alpha = 100
-    cfg.nodes = 16
-    cfg.planes = 2
-    cfg.time_multiplier = 10
 
-    dir_name = create_dir_str(cfg)
-    cfg.save_path = os.path.join(cfg.save_dir, dir_name)
+    # PASEOS specific configuration
+    cfg.start_time = "2023-Dec-17 14:42:42"
+    cfg.planes = 1
+    cfg.constellation_altitude = 786 * 1000  # altitude above the Earth's ground [m]
+    cfg.constellation_inclination = 98.62  # inclination of the orbit
+
+    # onboard power device settings
+    cfg.battery_level_in_Ws = 277200 * 0.5
+    cfg.max_battery_level_in_Ws = 277200
+    cfg.charging_rate_in_W = 20
+
+    # onboard temperature settings
+    cfg.actor_mass = 6.0
+    cfg.actor_initial_temperature_in_K = 283.15
+    cfg.actor_sun_absorptance = 0.9
+    cfg.actor_infrared_absorptance = 0.5
+    cfg.actor_sun_facing_area = 0.012
+    cfg.actor_central_body_facing_area = 0.01
+    cfg.actor_emissive_area = 0.1
+    cfg.actor_thermal_capacity = 6000
+
+    # onboard communication device
+    if cfg.mode == "Swarm" or cfg.mode == "FL_geostat":
+        cfg.bandwidth_in_kpbs = 100000  # [kbps] 100 Mbps (optical link)
+    else:
+        cfg.bandwidth_in_kpbs = 1000  # [kpbs] 1 Mbps (RF link)
+    cfg.compression_ratio = 12.7/13.8 # 13.8 and 12.7 MB are the sizes of original and zipped version of the model
+    
+    # Groundstation coordinates
+    if cfg.mode == "FL_ground":
+        cfg.stations = [
+            ["Maspalomas", 27.7629, -15.6338, 205.1],
+            ["Matera", 40.6486, 16.7046, 536.9],
+            ["Svalbard", 78.9067, 11.8883, 474.0],
+        ]
+        cfg.minimum_altitude_angle = 5
+
+    cfg.update_time = (
+        1e3  # [s] how much time should pass before attempting to share model
+    )
 
     return cfg

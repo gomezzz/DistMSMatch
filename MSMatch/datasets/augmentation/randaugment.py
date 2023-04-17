@@ -9,6 +9,11 @@ import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
 import albumentations as A
 import numpy as np
 
+try:  # to test locally by running python randaugment.py
+    from .ms_augmentations import ms_augmentation_list
+except:
+    from ms_augmentations import ms_augmentation_list
+
 
 def AutoContrast(img, _):
     return PIL.ImageOps.autocontrast(img)
@@ -168,10 +173,10 @@ class RandAugment:
     def __init__(self, n, m, use_ms_augmentations=False):
         self.n = n
         self.m = m  # [0, 30] in fixmatch, deprecated.
-        # if use_ms_augmentations:
-        #     self.augment_list = ms_augmentation_list()
-        # else:
-        self.augment_list = augment_list()
+        if use_ms_augmentations:
+            self.augment_list = ms_augmentation_list()
+        else:
+            self.augment_list = augment_list()
 
     def __call__(self, img):
         ops = random.choices(self.augment_list, k=self.n)
