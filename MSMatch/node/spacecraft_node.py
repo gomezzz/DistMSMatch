@@ -19,9 +19,10 @@ class SpaceCraftNode(BaseNode):
         pos_and_vel,
         cfg,
         dataloader,
+        rank,
         comm=None,
     ):
-        rank = comm.Get_rank()
+        # rank = comm.Get_rank()
         super(SpaceCraftNode, self).__init__(rank, cfg, dataloader)
 
         # Set up PASEOS instance
@@ -64,12 +65,12 @@ class SpaceCraftNode(BaseNode):
                 x for x in range(self.comm.Get_size()) if x != self.rank
             ]  # get all other process numbers
 
-        model_size_kb = cfg.compression_ratio * self._get_model_size_bytes() * 8 / 1e3
-        self.comm_duration = (
-            model_size_kb
-            / self.local_actor.communication_devices["link"].bandwidth_in_kbps
-        )
-        print(f"Comm duration: {self.comm_duration} s", flush=True)
+        # model_size_kb = cfg.compression_ratio * self._get_model_size_bytes() * 8 / 1e3
+        # self.comm_duration = (
+        #     model_size_kb
+        #     / self.local_actor.communication_devices["link"].bandwidth_in_kbps
+        # )
+        # print(f"Comm duration: {self.comm_duration} s", flush=True)
 
         self.update_time = cfg.update_time
 

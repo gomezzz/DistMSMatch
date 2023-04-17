@@ -18,17 +18,17 @@ class BaseNode:
         # server nodes are treated differently as no training is needed
         if is_server:
             self.device = "cpu"
-            self.model = self._create_model()  # Create model
+            # self.model = self._create_model()  # Create model
         else:
             self.device = (
                 "cuda:{}".format(self.rank % torch.cuda.device_count())
                 if torch.cuda.is_available()
                 else "cpu"
             )
-            self.model = self._create_model()  # Create model
+            # self.model = self._create_model()  # Create model
             self.n_gpus = torch.cuda.device_count()
 
-            self.model.set_data_loader(dataloader)  # create data iterators for training
+            # self.model.set_data_loader(dataloader)  # create data iterators for training
 
     def _create_model(self):
         """Create the models to be trained. Two equal models are created, one for training
