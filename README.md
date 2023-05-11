@@ -38,7 +38,7 @@ Distributed Semi-Supervised Multispectral Scene Classification with Few Labels
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-This is the code for to realize a distributed version of [MSMatch](https://github.com/gomezzz/MSMatch). The repository includes an implementation of [FixMatch](https://arxiv.org/abs/2001.07685) for the semi-supervised training of different convolutional neural networks, including a [U-Net Encoder](https://arxiv.org/abs/1505.04597), [EfficientNet](https://arxiv.org/abs/1905.11946) and [EfficientNet Lite](https://tfhub.dev/s?deployment-format=lite&q=efficientnet%20lite) to perform scene classification on the [EuroSAT](https://github.com/phelber/EuroSAT) dataset. The code builds on and extends the [FixMatch-pytorch](https://github.com/LeeDoYup/FixMatch-pytorch) implementation based on [PyTorch](https://pytorch.org/). 
+This is the code to realize DistMSMatch[https://arxiv.org/abs/2305.04059], a distributed version of [MSMatch](https://github.com/gomezzz/MSMatch). The repository includes an implementation of [FixMatch](https://arxiv.org/abs/2001.07685) for the semi-supervised training of different convolutional neural networks, including a [U-Net Encoder](https://arxiv.org/abs/1505.04597), [EfficientNet](https://arxiv.org/abs/1905.11946) and [EfficientNet Lite](https://tfhub.dev/s?deployment-format=lite&q=efficientnet%20lite) to perform scene classification on the [EuroSAT](https://github.com/phelber/EuroSAT) dataset. The code builds on and extends the [FixMatch-pytorch](https://github.com/LeeDoYup/FixMatch-pytorch) implementation based on [PyTorch](https://pytorch.org/). 
 ### Built With
 
 * [PyTorch](https://pytorch.org/)
@@ -121,7 +121,7 @@ This README was based on https://github.com/othneildrew/Best-README-Template
 
 ## Reference
 
-If you have used DistMSMatch, please cite the following paper:
+If you have used DistMSMatch, please cite the following paper (DistMSMatch[https://arxiv.org/abs/2305.04059]):
 ```
 @article{ostman2023distmsmatch,
   author = {Östman, Johan and Gómez, Pablo and Shreenath, Vinutha Magal and Meoni, Gabriele},
