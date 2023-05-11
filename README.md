@@ -105,9 +105,10 @@ The project is open to community contributions. Feel free to open an [issue](htt
 <!-- CONTACT -->
 ## Contact 
 
-Created by ESA's [Advanced Concepts Team](https://www.esa.int/gsp/ACT/index.html) and [$\Phi$-lab](https://philab.phi.esa.int/1) (shared first authorship).
-
+Created by ESA's [Advanced Concepts Team](https://www.esa.int/gsp/ACT/index.html), [$\Phi$-lab](https://philab.phi.esa.int/1), and AI Sweden.
+- Johan Östman - `johan.ostman at ai.se`
 - Pablo Gómez - `pablo.gomez at esa.int` (ACT)
+- Vinutha Magal Shreenath - `vinutha at ai.se`
 - Gabriele Meoni - `gabriele.meoni at esa.int` ($\Phi$-lab)
 
 Project Link: [https://www.esa.int/gsp/ACT/projects/semisupervised/](https://www.esa.int/gsp/ACT/projects/semisupervised/)
@@ -117,3 +118,15 @@ Project Link: [https://www.esa.int/gsp/ACT/projects/semisupervised/](https://www
 <!-- ACKNOWLEDGEMENTS 
 This README was based on https://github.com/othneildrew/Best-README-Template
 -->
+
+## Reference
+
+If you have used DistMSMatch, please cite the following paper:
+```
+@article{ostman2023distmsmatch,
+  author = {Östman, Johan and Gómez, Pablo and Shreenath, Vinutha Magal and Meoni, Gabriele},
+  title = {Decentralised Semi-supervised Onboard Learning for Scene Classification in Low-Earth Orbit},
+  journal = {arXiv:2305.04059 [cs.LG]},
+  year = {2023},
+}
+```
