@@ -1,28 +1,28 @@
 name: distmsmatch
 channels:
-- conda-forge
-- pytorch
+  - conda-forge
+  - pytorch
 dependencies:
-- cudatoolkit==10.2
-- python
-- pytorch==1.11.0
-- torchvision==0.12.0
-- pillow
-- tqdm
-- numpy
-- scikit-image
-- scikit-learn
-- imageio
-- efficientnet-pytorch
-- albumentations
-- tensorboard
-- dotmap
-- termcolor
-- toml
-- papermill
-- matplotlib
-- jupyter
-- pip
-- pip:
-  - efficientnet_lite_pytorch
-  - efficientnet_lite0_pytorch_model
+  - cudatoolkit
+  - python
+  - pytorch==1.11.0
+  - torchvision==0.12.0
+  - pillow
+  - tqdm
+  - numpy
+  - scikit-image
+  - scikit-learn
+  - imageio
+  - efficientnet-pytorch
+  - albumentations
+  - tensorboard
+  - dotmap
+  - termcolor
+  - toml
+  - papermill
+  - matplotlib
+  - jupyter
+  - pip
+  - pip:
+      - efficientnet_lite_pytorch
+      - efficientnet_lite0_pytorch_model
