@@ -3,12 +3,19 @@ import torch
 from .data_utils import split_ssl_data
 from .BasicDataset import BasicDataset
 from .EurosatRGBDataset import EurosatRGBDataset
+from .GalaxyMNISTDataset import GalaxyMNIST
 
 from torchvision import transforms
 
 mean, std = {}, {}
 mean["eurosat_rgb"] = [x / 255 for x in [87.78644464, 96.96653968, 103.99007906]]
 std["eurosat_rgb"] = [x / 255 for x in [51.92045453, 34.82338243, 29.26981551]]
+mean["galaxy_mnist"] = [
+    x / 255 for x in [29.56907711791992, 27.199814483642577, 27.119884887695314]
+]
+std["galaxy_mnist"] = [
+    x / 255 for x in [27.076942699407407, 25.777073290623655, 24.742556209044913]
+]
 
 
 def get_transform(mean, std, train=True):
@@ -32,9 +39,7 @@ def get_transform(mean, std, train=True):
             ]
         )
     else:
-        return transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize(mean, std)]
-        )
+        return transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean, std)])
 
 
 def get_inverse_transform(mean, std):
@@ -51,9 +56,7 @@ def get_inverse_transform(mean, std):
     std = torch.as_tensor(std)
     std_inv = 1 / (std + 1e-7)
     mean_inv = -mean * std_inv
-    return transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize(mean_inv, std_inv)]
-    )
+    return transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean_inv, std_inv)])
 
 
 class SSL_Dataset:
@@ -89,6 +92,8 @@ class SSL_Dataset:
         """
         if self.name == "eurosat_rgb":
             dset = EurosatRGBDataset(train=self.train, seed=self.seed)
+        elif self.name == "galaxy_mnist":
+            dset = GalaxyMNIST(root="data/galaxy_mnist_download", download=True, train=self.train)
         # elif self.name == "eurosat_ms":
         #     dset = EurosatDataset(train=self.train, seed=self.seed)
         else:

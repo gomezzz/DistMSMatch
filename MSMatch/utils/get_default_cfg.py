@@ -12,7 +12,8 @@ def get_default_cfg():
         DotMap: the default configuration
     """
     cfg = DotMap(_dynamic=False)
-    cfg.dataset = "eurosat_rgb"
+    cfg.dataset = "galaxy_mnist"
+    # cfg.dataset = "eurosat_rgb"
     cfg.net = "efficientnet-lite0"
     cfg.batch_size = 32
     cfg.p_cutoff = 0.95

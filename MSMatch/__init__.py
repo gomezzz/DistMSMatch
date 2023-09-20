@@ -12,6 +12,7 @@ from .utils.print_cfg import print_cfg
 
 from .datasets.BasicDataset import BasicDataset
 from .datasets.EurosatRGBDataset import EurosatRGBDataset
+from .datasets.GalaxyMNISTDataset import GalaxyMNIST
 from .datasets.SSL_Dataset import SSL_Dataset
 from .datasets.data_utils import get_data_loader
 from .models.fixmatch.FixMatch import FixMatch
@@ -20,6 +21,7 @@ __all__ = [
     "BasicDataset",
     "EurosatRGBDataset",
     "FixMatch",
+    "GalaxyMNIST",
     "get_cosine_schedule_with_warmup",
     "get_data_loader",
     "get_default_cfg",

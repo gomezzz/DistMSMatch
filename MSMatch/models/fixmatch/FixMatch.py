@@ -67,9 +67,7 @@ class FixMatch:
         self.logger = logger
         self.print_fn = print if logger is None else logger.info
 
-        for param_q, param_k in zip(
-            self.train_model.parameters(), self.eval_model.parameters()
-        ):
+        for param_q, param_k in zip(self.train_model.parameters(), self.eval_model.parameters()):
             param_k.data.copy_(param_q.detach().data)  # initialize
             param_k.requires_grad = False  # not update by gradient for eval_net
 
@@ -86,16 +84,10 @@ class FixMatch:
             if hasattr(self.train_model, "module")
             else self.train_model.parameters()
         )
-        for param_train, param_eval in zip(
-            train_model_params, self.eval_model.parameters()
-        ):
-            param_eval.copy_(
-                param_eval * self.ema_m + param_train.detach() * (1 - self.ema_m)
-            )
+        for param_train, param_eval in zip(train_model_params, self.eval_model.parameters()):
+            param_eval.copy_(param_eval * self.ema_m + param_train.detach() * (1 - self.ema_m))
 
-        for buffer_train, buffer_eval in zip(
-            self.train_model.buffers(), self.eval_model.buffers()
-        ):
+        for buffer_train, buffer_eval in zip(self.train_model.buffers(), self.eval_model.buffers()):
             buffer_eval.copy_(buffer_train)
 
     def set_data_loader(self, loader_dict):
@@ -118,16 +110,13 @@ class FixMatch:
 
         total_epochs = cfg.num_train_iter // cfg.num_eval_iter
         curr_epoch = 0
-        progressbar = tqdm(
-            desc=f"Epoch {curr_epoch}/{total_epochs}", total=cfg.num_eval_iter
-        )
+        progressbar = tqdm(desc=f"Epoch {curr_epoch}/{total_epochs}", total=cfg.num_eval_iter)
 
         best_eval_acc, best_it = 0.0, 0
 
         for (x_lb, y_lb), (x_ulb_w, x_ulb_s, _) in zip(
             self.loader_dict["train_lb"], self.loader_dict["train_ulb"]
         ):
-
             # prevent the training iterations exceed cfg.num_train_iter
             if self.it > cfg.num_train_iter:
                 break
@@ -210,7 +199,6 @@ class FixMatch:
             if not cfg.multiprocessing_distributed or (
                 cfg.multiprocessing_distributed and cfg.rank % ngpus_per_node == 0
             ):
-
                 if self.it == best_it:
                     self.save_run("model_best.pth", cfg.save_path, cfg=None)
 
@@ -245,7 +233,7 @@ class FixMatch:
             num_batch = x.shape[0]
             total_num += num_batch
             logits = eval_model(x)
-            loss = F.cross_entropy(logits, y, reduction="mean")
+            loss = F.cross_entropy(logits, y.long(), reduction="mean")
             acc = torch.sum(torch.max(logits, dim=-1)[1] == y)
 
             total_loss += loss.detach() * num_batch
@@ -266,14 +254,10 @@ class FixMatch:
         Path(save_path).mkdir(parents=True, exist_ok=True)
 
         train_model = (
-            self.train_model.module
-            if hasattr(self.train_model, "module")
-            else self.train_model
+            self.train_model.module if hasattr(self.train_model, "module") else self.train_model
         )
         eval_model = (
-            self.eval_model.module
-            if hasattr(self.eval_model, "module")
-            else self.eval_model
+            self.eval_model.module if hasattr(self.eval_model, "module") else self.eval_model
         )
         torch.save(
             {
@@ -295,14 +279,10 @@ class FixMatch:
         checkpoint = torch.load(load_path)
 
         train_model = (
-            self.train_model.module
-            if hasattr(self.train_model, "module")
-            else self.train_model
+            self.train_model.module if hasattr(self.train_model, "module") else self.train_model
         )
         eval_model = (
-            self.eval_model.module
-            if hasattr(self.eval_model, "module")
-            else self.eval_model
+            self.eval_model.module if hasattr(self.eval_model, "module") else self.eval_model
         )
 
         for key in checkpoint.keys():
