@@ -30,6 +30,7 @@ Distributed Semi-Supervised Multispectral Scene Classification with Few Labels
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#FAQ">FAQ</a></li>
     <li><a href="#contact">Contact</a></li>
+    <li><a href="#license">License</a></li>
   </ol>
 </details>
 
@@ -113,7 +114,10 @@ Created by ESA's [Advanced Concepts Team](https://www.esa.int/gsp/ACT/index.html
 
 Project Link: [https://www.esa.int/gsp/ACT/projects/semisupervised/](https://www.esa.int/gsp/ACT/projects/semisupervised/)
 
+<!-- LICENSE -->
+## License
 
+Distributed under the MIT License. See [LICENSE](https://github.com/gomezzz/DistMSMatch/blob/main/LICENSE) for more information.
 
 <!-- ACKNOWLEDGEMENTS 
 This README was based on https://github.com/othneildrew/Best-README-Template
